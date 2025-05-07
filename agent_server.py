@@ -1,24 +1,23 @@
 import asyncio
-import websockets # Importiere das Hauptmodul zuerst
+import websockets
 import os
 import logging
 import json
 import base64
 import httpx
 import sys
+from websockets.connection import ConnectionState # <--- Korrekter Import für v15.0.1
 
 # SCRIPT VERSION FÜR LOGGING
-SCRIPT_VERSION = "3.5 - Get Websockets Version (Import Removed)"
+SCRIPT_VERSION = "3.6 - Final Cleanup & First Message Test"
 
 # --- Logging Setup ---
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
-
-# !!! WICHTIG: Logge die Websockets-Version GANZ AM ANFANG !!!
 try:
-    logger.info(f"========= WEBSOCKETS LIBRARY VERSION: {websockets.__version__} =========")
+    logger.info(f"WEBSOCKETS LIBRARY VERSION (erneut geprüft): {websockets.__version__}")
 except Exception as e:
     logger.error(f"Konnte websockets.__version__ nicht abrufen: {e}")
 
@@ -64,7 +63,7 @@ async def handle_connection(talkdesk_ws):
     remote_addr = talkdesk_ws.remote_address
     logger.info(f"+++ Neue Verbindung (möglicherweise TalkDesk): {remote_addr}")
     elevenlabs_ws = None
-    stream_sid = None
+    stream_sid = None # Wichtig für spätere Antworten
     try:
         start_data = None
         start_message_str_for_logging = None
@@ -128,16 +127,16 @@ async def handle_connection(talkdesk_ws):
 
         stream_sid = start_info.get("streamSid")
         call_sid = start_info.get("callSid", f"UnknownCall_{remote_addr}")
-        # account_sid_from_start = start_info.get("accountSid") 
+        account_sid_from_start = start_info.get("accountSid")
         media_format = start_info.get("mediaFormat", {})
         custom_params = start_info.get("customParameters", {})
-        account_sid_top = start_data.get("account_sid", "UnknownAccount") 
-        
+        account_sid_top = start_data.get("account_sid", "UnknownAccount") # Aus Top-Level
+
         if not stream_sid:
             logger.error(f"Kein 'streamSid' im 'start'-Objekt von {remote_addr}: {start_info}")
             return
 
-        logger.info(f"Anruf gestartet: CallSid='{call_sid}', StreamSid='{stream_sid}', AccountSid(Top)='{account_sid_top}'")
+        logger.info(f"Anruf gestartet: CallSid='{call_sid}', StreamSid='{stream_sid}', AccountSid(Start)='{account_sid_from_start}', AccountSid(Top)='{account_sid_top}'")
         logger.info(f"Media Format von {remote_addr}: {media_format}")
         logger.info(f"Custom Parameters von {remote_addr}: {custom_params}")
 
@@ -152,22 +151,26 @@ async def handle_connection(talkdesk_ws):
             "type": "conversation_initiation_client_data",
             "conversation_config_override": {"agent": {"prompt": {"prompt": POC_PROMPT}}}
         }
-        # if POC_FIRST_MESSAGE: 
-        #    initial_config["conversation_config_override"]["agent"]["first_message"] = POC_FIRST_MESSAGE
+        # 'first_message' wieder senden, da Overrides in ElevenLabs UI jetzt erlaubt sind
+        if POC_FIRST_MESSAGE:
+           initial_config["conversation_config_override"]["agent"]["first_message"] = POC_FIRST_MESSAGE
         
         await elevenlabs_ws.send(json.dumps(initial_config))
-        logger.info(f"Initiale Konfiguration an Elevenlabs für {remote_addr} gesendet: Prompt='{POC_PROMPT}' (First Message NICHT gesendet!)")
+        if POC_FIRST_MESSAGE and "first_message" in initial_config["conversation_config_override"]["agent"]:
+            logger.info(f"Initiale Konfiguration an Elevenlabs für {remote_addr} gesendet: Prompt='{POC_PROMPT}', First Message='{POC_FIRST_MESSAGE}'")
+        else:
+            logger.info(f"Initiale Konfiguration an Elevenlabs für {remote_addr} gesendet: Prompt='{POC_PROMPT}' (First Message NICHT gesendet oder war leer)")
         
         logger.info(f"PoC für {remote_addr}: Verbindung zu TalkDesk & ElevenLabs steht. Warte...")
 
-        async for message in talkdesk_ws: 
+        async for message in talkdesk_ws:
             try:
                 if isinstance(message, str):
                     msg_data = json.loads(message)
                     evt = msg_data.get("event")
                     if evt == "stop":
                         logger.info(f"'stop'-Event von TalkDesk {remote_addr} empfangen: {message[:200]}")
-                        break 
+                        break
                     logger.debug(f"Ignoriere Text-Event '{evt}' von TalkDesk {remote_addr}")
                 else:
                     logger.debug(f"Ignoriere Binär-Nachricht von TalkDesk {remote_addr}")
@@ -179,14 +182,27 @@ async def handle_connection(talkdesk_ws):
     finally:
         logger.info(f"Beende Handler für {remote_addr}. Räume auf...")
         if elevenlabs_ws:
-            logger.info(f"Versuche Elevenlabs WebSocket für {remote_addr} zu schließen (vereinfacht)...")
-            try:
-                await asyncio.wait_for(elevenlabs_ws.close(code=1000, reason='Handler finished'), timeout=2.0)
-                logger.info(f"Elevenlabs WebSocket für {remote_addr} geschlossen.")
-            except Exception as e:
-                logger.error(f"Fehler beim vereinfachten Schließen des Elevenlabs WS: {e}", exc_info=True)
+            # Korrekte Prüfung mit ConnectionState für websockets >= 10.x (Version 15.0.1 wurde geloggt)
+            if elevenlabs_ws.state == ConnectionState.OPEN:
+                logger.info(f"Schließe Elevenlabs WebSocket Verbindung für {remote_addr} (State: OPEN)...")
+                try:
+                    await asyncio.wait_for(elevenlabs_ws.close(code=1000, reason='Handler finished normally'), timeout=5.0)
+                    logger.info(f"Elevenlabs WebSocket für {remote_addr} aufgeräumt.")
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout beim Schließen der Elevenlabs WebSocket für {remote_addr}.")
+                except Exception as e:
+                    logger.error(f"Fehler beim Schließen der Elevenlabs WebSocket für {remote_addr}: {e}", exc_info=True)
+            elif elevenlabs_ws.state == ConnectionState.CLOSED:
+                 logger.info(f"Elevenlabs WebSocket für {remote_addr} war bereits geschlossen.")
+            else: 
+                 logger.warning(f"Elevenlabs WebSocket für {remote_addr} in Zustand ({elevenlabs_ws.state}) beim Aufräumen. Versuche trotzdem zu schließen.")
+                 try:
+                    await asyncio.wait_for(elevenlabs_ws.close(code=1008, reason='Closing from unexpected state'), timeout=5.0)
+                    logger.info(f"Elevenlabs WebSocket für {remote_addr} (aus unerwartetem Zustand) aufgeräumt.")
+                 except Exception as e:
+                    logger.error(f"Fehler beim Schließen des Elevenlabs WebSockets (aus unerwartetem Zustand) für {remote_addr}: {e}", exc_info=True)
         else:
-            logger.info(f"Keine Elevenlabs WS-Verbindung zum Schließen vorhanden für {remote_addr}.")
+             logger.info(f"Keine (initialisierte) Elevenlabs WebSocket Verbindung zum Schließen für {remote_addr} vorhanden.")
 
 async def main():
     try:
