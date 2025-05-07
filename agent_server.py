@@ -9,7 +9,7 @@ import sys
 # KEIN IMPORT von ConnectionState mehr
 
 # SCRIPT VERSION FÜR LOGGING
-SCRIPT_VERSION = "3.10 - Finally Block with .close_called/.closed.done & Pinned Lib Version"
+SCRIPT_VERSION = "3.12 - Finally Block with readyState & Pinned Lib Version"
 
 # --- Logging Setup ---
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -153,13 +153,13 @@ async def handle_connection(talkdesk_ws):
         }
         if POC_FIRST_MESSAGE: 
            initial_config["conversation_config_override"]["agent"]["first_message"] = POC_FIRST_MESSAGE
-
+        
         await elevenlabs_ws.send(json.dumps(initial_config))
         if POC_FIRST_MESSAGE and "first_message" in initial_config["conversation_config_override"]["agent"]:
             logger.info(f"Initiale Konfiguration an Elevenlabs für {remote_addr} gesendet: Prompt='{POC_PROMPT}', First Message='{POC_FIRST_MESSAGE}'")
         else:
             logger.info(f"Initiale Konfiguration an Elevenlabs für {remote_addr} gesendet: Prompt='{POC_PROMPT}' (First Message NICHT gesendet oder war leer)")
-
+        
         logger.info(f"PoC für {remote_addr}: Verbindung zu TalkDesk & ElevenLabs steht. Warte...")
 
         async for message in talkdesk_ws: 
@@ -181,29 +181,63 @@ async def handle_connection(talkdesk_ws):
     finally:
         logger.info(f"Beende Handler für {remote_addr}. Räume auf...")
         if elevenlabs_ws:
-            # Prüfen, ob close() noch nicht gerufen wurde und die Verbindung nicht schon komplett zu ist
-            if not elevenlabs_ws.close_called and not elevenlabs_ws.closed.done():
-                logger.info(f"Schließe aktive Elevenlabs WebSocket für {remote_addr} (close_called={elevenlabs_ws.close_called}, closed.done()={elevenlabs_ws.closed.done()})...")
-                try:
+            try:
+                current_ready_state = elevenlabs_ws.readyState
+                logger.info(f"Elevenlabs WebSocket readyState für {remote_addr}: {current_ready_state} (OPEN ist 1)")
+
+                if current_ready_state == 1: # 1 entspricht OPEN
+                    logger.info(f"Schließe Elevenlabs WebSocket (readyState == OPEN) für {remote_addr}...")
                     await asyncio.wait_for(elevenlabs_ws.close(code=1000, reason='Handler finished normally'), timeout=5.0)
-                    logger.info(f"Elevenlabs WebSocket für {remote_addr} erfolgreich geschlossen (close() aufgerufen).")
-                except asyncio.TimeoutError:
-                    logger.warning(f"Timeout beim expliziten Schließen der Elevenlabs WebSocket für {remote_addr}.")
-                except websockets.exceptions.ConnectionClosed: # Kann auftreten, wenn die Gegenseite schneller war
-                    logger.info(f"Elevenlabs WebSocket für {remote_addr} war bereits geschlossen, als close() aufgerufen wurde oder während des Schließens.")
-                except Exception as e:
-                    logger.error(f"Fehler beim expliziten Schließen der Elevenlabs WebSocket für {remote_addr}: {e}", exc_info=True)
-            elif elevenlabs_ws.closed.done():
-                logger.info(f"Elevenlabs WebSocket für {remote_addr} war bereits vollständig geschlossen.")
-            elif elevenlabs_ws.close_called:
-                logger.info(f"Schließvorgang für Elevenlabs WebSocket für {remote_addr} wurde bereits initiiert, warte auf Bestätigung...")
-                try:
-                    await asyncio.wait_for(elevenlabs_ws.wait_closed(), timeout=2.0)
-                    logger.info(f"Elevenlabs WebSocket für {remote_addr} ist nun nach Warten bestätigt geschlossen.")
-                except asyncio.TimeoutError:
-                    logger.warning(f"Timeout beim Warten auf Bestätigung des Schließens für {remote_addr}.")
-                except Exception as e:
-                    logger.error(f"Fehler beim Warten auf Bestätigung des Schließens für {remote_addr}: {e}", exc_info=True)
+                    logger.info(f"Elevenlabs WebSocket für {remote_addr} erfolgreich geschlossen (via readyState).")
+                elif current_ready_state == 0 or current_ready_state == 2: # CONNECTING oder CLOSING
+                     logger.warning(f"Elevenlabs WebSocket für {remote_addr} in state {current_ready_state} beim Aufräumen. Warte kurz auf Abschluss...")
+                     try:
+                         await asyncio.wait_for(elevenlabs_ws.wait_closed(), timeout=2.0)
+                         logger.info(f"Elevenlabs WebSocket für {remote_addr} ist nun nach Warten geschlossen (war {current_ready_state}).")
+                     except asyncio.TimeoutError:
+                         logger.warning(f"Timeout beim Warten auf das Schließen des Elevenlabs WebSocket (war {current_ready_state}) für {remote_addr}.")
+                     except Exception as e_wait:
+                         logger.error(f"Fehler beim Warten auf Schließen des Elevenlabs WebSocket (war {current_ready_state}) für {remote_addr}: {e_wait}", exc_info=True)
+                elif current_ready_state == 3: # CLOSED
+                    logger.info(f"Elevenlabs WebSocket für {remote_addr} war bereits geschlossen (readyState={current_ready_state}).")
+                else: # Unerwarteter Wert für readyState
+                    logger.warning(f"Elevenlabs WebSocket für {remote_addr} in unerwartetem readyState={current_ready_state}. Fallback zu .close_called/.closed.done()")
+                    # Fallback-Logik wie in Version 3.10, falls readyState nicht wie erwartet ist
+                    if not elevenlabs_ws.close_called and not elevenlabs_ws.closed.done():
+                        logger.info(f"Schließe aktive Elevenlabs WebSocket (Fallback nach unerwartetem readyState) für {remote_addr}...")
+                        try:
+                            await asyncio.wait_for(elevenlabs_ws.close(code=1008, reason='Closing from unexpected readyState - fallback'), timeout=5.0)
+                            logger.info(f"Elevenlabs WebSocket (Fallback nach unerwartetem readyState) für {remote_addr} erfolgreich geschlossen.")
+                        except Exception as e_close_fb_unexpected:
+                            logger.error(f"Fehler beim expliziten Schließen (Fallback nach unerwartetem readyState) der Elevenlabs WebSocket für {remote_addr}: {e_close_fb_unexpected}", exc_info=True)
+                    # Weitere Fallback-Bedingungen könnten hier folgen, falls nötig
+
+            except AttributeError: 
+                logger.warning(f"AttributeError: 'readyState' nicht auf elevenlabs_ws für {remote_addr} gefunden. Fallback auf .close_called/.closed.done().")
+                if not elevenlabs_ws.close_called and not elevenlabs_ws.closed.done():
+                    logger.info(f"Schließe aktive Elevenlabs WebSocket (Fallback nach AttributeError) für {remote_addr}...")
+                    try:
+                        await asyncio.wait_for(elevenlabs_ws.close(code=1000, reason='Handler finished normally - fallback AE'), timeout=5.0)
+                        logger.info(f"Elevenlabs WebSocket (Fallback nach AttributeError) für {remote_addr} erfolgreich geschlossen.")
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Timeout beim expliziten Schließen (Fallback nach AttributeError) der Elevenlabs WebSocket für {remote_addr}.")
+                    except websockets.exceptions.ConnectionClosed:
+                         logger.info(f"Elevenlabs WebSocket (Fallback nach AttributeError) für {remote_addr} war bereits geschlossen.")
+                    except Exception as e_close_fb_ae:
+                        logger.error(f"Fehler beim expliziten Schließen (Fallback nach AttributeError) der Elevenlabs WebSocket für {remote_addr}: {e_close_fb_ae}", exc_info=True)
+                elif elevenlabs_ws.closed.done():
+                    logger.info(f"Elevenlabs WebSocket (Fallback nach AttributeError) für {remote_addr} war bereits vollständig geschlossen.")
+                elif elevenlabs_ws.close_called:
+                    logger.info(f"Schließvorgang (Fallback nach AttributeError) für Elevenlabs WebSocket für {remote_addr} wurde bereits initiiert, warte...")
+                    try:
+                        await asyncio.wait_for(elevenlabs_ws.wait_closed(), timeout=2.0)
+                        logger.info(f"Elevenlabs WebSocket (Fallback nach AttributeError) für {remote_addr} ist nun nach Warten bestätigt geschlossen.")
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Timeout beim Warten auf Bestätigung des Schließens (Fallback nach AttributeError) für {remote_addr}.")
+                    except Exception as e_wait_fb_ae:
+                        logger.error(f"Fehler beim Warten auf Bestätigung des Schließens (Fallback nach AttributeError) für {remote_addr}: {e_wait_fb_ae}", exc_info=True)
+            except Exception as e_final_cleanup:
+                logger.error(f"Genereller Fehler im ElevenLabs WS Cleanup für {remote_addr}: {e_final_cleanup}", exc_info=True)
         else:
              logger.info(f"Keine (initialisierte) Elevenlabs WebSocket Verbindung zum Schließen für {remote_addr} vorhanden.")
 
@@ -219,7 +253,7 @@ async def main():
         async with websockets.serve(handle_connection, WEBSOCKET_HOST, WEBSOCKET_PORT):
             await asyncio.Future()
     except OSError as e:
-         if e.errno == 98:
+         if e.errno == 98: 
               logger.error(f"Port {WEBSOCKET_PORT} wird bereits verwendet!")
          else:
               logger.error(f"Server konnte nicht gestartet werden (OS Error {e.errno}): {e}", exc_info=True)
