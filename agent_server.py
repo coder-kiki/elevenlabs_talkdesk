@@ -6,10 +6,10 @@ import json
 import base64 # Obwohl nicht direkt verwendet, oft nützlich bei WS
 import httpx
 import sys
-from websockets.connection import State # NEU: Korrekter Import für den Verbindungsstatus
+from websockets.connection import State # Korrekter Import für den Verbindungsstatus
 
 # SCRIPT VERSION FÜR LOGGING
-SCRIPT_VERSION = "3.13 - Finally Block with .state & Pinned Lib Version"
+SCRIPT_VERSION = "3.14 - Finally Block using .state for both WS"
 
 # --- Logging Setup ---
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -79,8 +79,8 @@ async def handle_connection(talkdesk_ws):
                 logger.debug(f"Raw Message #{message_count}: {message_str}")
             except asyncio.TimeoutError:
                 logger.error(f"Timeout (10s) beim Warten auf Nachricht #{message_count} von {remote_addr}.")
-                if message_count == 1 and not start_data: return # Wenn erste Nachricht ausbleibt, beenden
-                continue # Ansonsten bei weiteren Timeouts im Loop bleiben, falls start schon da ist
+                if message_count == 1 and not start_data: return
+                continue
             except websockets.exceptions.ConnectionClosed:
                 logger.info(f"Verbindung von Client {remote_addr} geschlossen während Warten auf Nachricht #{message_count}.")
                 return
@@ -96,8 +96,8 @@ async def handle_connection(talkdesk_ws):
                 elif event == "start":
                     logger.info(f"'start'-Event von {remote_addr} gefunden!")
                     start_data = data
-                    start_message_str_for_logging = message_str # Für späteres Logging speichern
-                    break # Start-Event gefunden, Schleife verlassen
+                    start_message_str_for_logging = message_str
+                    break
                 elif event == "media":
                     logger.warning(f"Unerwartetes 'media'-Event von {remote_addr} während Initialisierung. Ignoriere.")
                     continue
@@ -107,7 +107,7 @@ async def handle_connection(talkdesk_ws):
             except json.JSONDecodeError:
                 logger.error(f"Konnte Nachricht #{message_count} von {remote_addr} nicht als JSON parsen: {message_str[:200]}...")
                 continue
-            except Exception as e: # Andere Fehler beim Verarbeiten der Nachricht
+            except Exception as e:
                 logger.error(f"Fehler Verarbeiten Nachricht #{message_count} von {remote_addr}: {e}", exc_info=True)
                 return
 
@@ -116,7 +116,7 @@ async def handle_connection(talkdesk_ws):
             return
 
         logger.info(f"--- Vollständige Start-Nachricht von {remote_addr} ---")
-        logger.info(start_message_str_for_logging) # Geloggte Start-Nachricht
+        logger.info(start_message_str_for_logging)
         logger.info(f"--- Verarbeitete Start-Daten (pretty) ---")
         logger.info(json.dumps(start_data, indent=2))
 
@@ -130,7 +130,6 @@ async def handle_connection(talkdesk_ws):
         account_sid_from_start = start_info.get("accountSid")
         media_format = start_info.get("mediaFormat", {})
         custom_params = start_info.get("customParameters", {})
-        # account_sid_top = start_data.get("account_sid", "UnknownAccount") # `account_sid` ist im `start` Objekt, nicht auf Top-Level
 
         if not stream_sid:
             logger.error(f"Kein 'streamSid' im 'start'-Objekt von {remote_addr}: {start_info}")
@@ -142,11 +141,8 @@ async def handle_connection(talkdesk_ws):
 
         signed_url = await get_elevenlabs_signed_url()
         if not signed_url:
-            # Fehler wurde bereits in get_elevenlabs_signed_url geloggt.
-            # Wir könnten hier eine spezifischere Exception werfen, wenn nötig,
-            # oder einfach den Handler beenden, da ohne URL nichts geht.
             logger.error(f"Abbruch, da keine Signed URL für {remote_addr} erhalten werden konnte.")
-            return # Oder raise ConnectionAbortedError(...)
+            return
 
         elevenlabs_ws = await websockets.connect(signed_url)
         logger.info(f"Verbindung zu Elevenlabs WebSocket für {remote_addr} hergestellt.")
@@ -166,7 +162,6 @@ async def handle_connection(talkdesk_ws):
 
         logger.info(f"PoC für {remote_addr}: Verbindung zu TalkDesk & ElevenLabs steht. Warte auf Nachrichten...")
 
-        # Hauptschleife zum Verarbeiten von Nachrichten von TalkDesk
         async for message in talkdesk_ws:
             try:
                 if isinstance(message, str):
@@ -174,18 +169,15 @@ async def handle_connection(talkdesk_ws):
                     evt = msg_data.get("event")
                     if evt == "stop":
                         logger.info(f"'stop'-Event von TalkDesk {remote_addr} empfangen: {message[:200]}")
-                        break # Beendet die Schleife und geht zum finally-Block
+                        break
                     logger.debug(f"Ignoriere Text-Event '{evt}' von TalkDesk {remote_addr}")
-                else: # Annahme: Binäre Nachrichten sind Audio-Daten
+                else:
                     logger.debug(f"Ignoriere Binär-Nachricht von TalkDesk {remote_addr}")
-                    # Hier später Audio an elevenlabs_ws weiterleiten:
-                    # if elevenlabs_ws and elevenlabs_ws.state == State.OPEN:
-                    #     await elevenlabs_ws.send(message)
+                    # Hier später Audio an elevenlabs_ws weiterleiten
             except json.JSONDecodeError:
                 logger.warning(f"Konnte Nachricht von TalkDesk nicht als JSON parsen (ignoriere): {message[:200]}")
             except Exception as e:
                 logger.warning(f"Fehler bei Verarbeitung weiterer Nachricht von TalkDesk {remote_addr}: {e}", exc_info=True)
-        # Schleife beendet (entweder durch 'stop' oder weil TalkDesk die Verbindung geschlossen hat)
 
     except websockets.exceptions.ConnectionClosedOK:
         logger.info(f"TalkDesk WebSocket Verbindung zu {remote_addr} wurde sauber geschlossen (OK).")
@@ -195,9 +187,11 @@ async def handle_connection(talkdesk_ws):
         logger.error(f"Unerwarteter Fehler im Haupt-Handler für {remote_addr}: {e}", exc_info=True)
     finally:
         logger.info(f"Beende Handler für {remote_addr}. Räume auf...")
+
+        # 1. Aufräumen der ElevenLabs-Verbindung
         if elevenlabs_ws:
             try:
-                current_state = elevenlabs_ws.state # KORREKTES ATTRIBUT
+                current_state = elevenlabs_ws.state
                 logger.info(f"Elevenlabs WebSocket state für {remote_addr}: {current_state} (OPEN ist {State.OPEN}, CLOSED ist {State.CLOSED})")
 
                 if current_state == State.OPEN:
@@ -206,14 +200,14 @@ async def handle_connection(talkdesk_ws):
                     logger.info(f"Elevenlabs WebSocket .close() für {remote_addr} aufgerufen. Warte auf Bestätigung...")
                     await asyncio.wait_for(elevenlabs_ws.wait_closed(), timeout=5.0) # Warten bis wirklich geschlossen
                     logger.info(f"Elevenlabs WebSocket für {remote_addr} erfolgreich geschlossen (via state und wait_closed).")
-                elif current_state == State.CLOSING: # Wenn schon im Schließvorgang
+                elif current_state == State.CLOSING:
                     logger.warning(f"Elevenlabs WebSocket für {remote_addr} in state {current_state} beim Aufräumen. Warte auf Abschluss...")
                     try:
                         await asyncio.wait_for(elevenlabs_ws.wait_closed(), timeout=5.0)
                         logger.info(f"Elevenlabs WebSocket für {remote_addr} ist nun nach Warten geschlossen (war {current_state}).")
                     except asyncio.TimeoutError:
                         logger.warning(f"Timeout beim Warten auf das Schließen des Elevenlabs WebSocket (war {current_state}) für {remote_addr}.")
-                    except Exception as e_wait: # Andere Fehler beim Warten
+                    except Exception as e_wait:
                         logger.error(f"Fehler beim Warten auf Schließen des Elevenlabs WebSocket (war {current_state}) für {remote_addr}: {e_wait}", exc_info=True)
                 elif current_state == State.CLOSED:
                     logger.info(f"Elevenlabs WebSocket für {remote_addr} war bereits geschlossen (state={current_state}).")
@@ -223,52 +217,58 @@ async def handle_connection(talkdesk_ws):
                         await asyncio.wait_for(elevenlabs_ws.close(code=1001, reason='Closing while still connecting'), timeout=5.0)
                         await asyncio.wait_for(elevenlabs_ws.wait_closed(), timeout=5.0)
                         logger.info(f"Elevenlabs WebSocket (war CONNECTING) für {remote_addr} geschlossen.")
-                    except Exception as e_close_conn: # Fehler beim Schließen/Warten einer CONNECTING Verbindung
+                    except Exception as e_close_conn:
                         logger.error(f"Fehler beim Schließen/Warten einer CONNECTING Elevenlabs WS für {remote_addr}: {e_close_conn}", exc_info=True)
-                else: # Unerwarteter Status
+                else:
                     logger.warning(f"Elevenlabs WebSocket für {remote_addr} in unerwartetem state={current_state}. Prüfe .closed.done() als Fallback.")
                     if hasattr(elevenlabs_ws, 'closed') and not elevenlabs_ws.closed.done():
                         logger.info(f"Versuche Elevenlabs WebSocket (Fallback nach unerwartetem state) für {remote_addr} zu schließen...")
                         try:
                             await asyncio.wait_for(elevenlabs_ws.close(code=1008, reason='Closing from unexpected state - fallback'), timeout=5.0)
-                            await asyncio.wait_for(elevenlabs_ws.wait_closed(), timeout=5.0) # Auch hier warten
+                            await asyncio.wait_for(elevenlabs_ws.wait_closed(), timeout=5.0)
                             logger.info(f"Elevenlabs WebSocket (Fallback nach unerwartetem state) für {remote_addr} geschlossen.")
-                        except Exception as e_close_fb_unexpected: # Fehler im Fallback-Schließen
+                        except Exception as e_close_fb_unexpected:
                             logger.error(f"Fehler beim Schließen/Warten (Fallback nach unerwartetem state) der Elevenlabs WS für {remote_addr}: {e_close_fb_unexpected}", exc_info=True)
                     else:
-                        logger.info(f"Elevenlabs WebSocket (Fallback nach unerwartetem state) für {remote_addr} war bereits durch .closed.done() als geschlossen markiert oder .closed Attribut fehlt.")
+                        logger.info(f"Elevenlabs WebSocket (Fallback nach unerwartetem state) für {remote_addr} war bereits durch .closed.done() als geschlossen markiert oder .closed fehlt.")
 
-            except websockets.exceptions.ConnectionClosed: # Fängt sowohl ConnectionClosedOK als ConnectionClosedError
+            except websockets.exceptions.ConnectionClosed:
                 logger.info(f"Elevenlabs WebSocket für {remote_addr} war bereits geschlossen (fing ConnectionClosed Exception). State: {getattr(elevenlabs_ws, 'state', 'N/A')}")
-            except AttributeError as e_attr: # Falls .state selbst fehlen sollte (sehr unwahrscheinlich für ein gültiges WS-Objekt)
+            except AttributeError as e_attr:
                 logger.error(f"Schwerwiegender AttributeError im ElevenLabs WS Cleanup für {remote_addr}: {e_attr}. elevenlabs_ws={elevenlabs_ws}", exc_info=True)
-            except Exception as e_final_cleanup: # Andere, generelle Fehler beim ElevenLabs WS Cleanup
+            except Exception as e_final_cleanup:
                 logger.error(f"Genereller Fehler im ElevenLabs WS Cleanup für {remote_addr}: {e_final_cleanup}", exc_info=True)
         else:
             logger.info(f"Keine (initialisierte) Elevenlabs WebSocket Verbindung zum Schließen für {remote_addr} vorhanden.")
 
-        # Aufräumen der TalkDesk-Verbindung
-        # Dies ist oft nicht streng notwendig, wenn der Handler normal endet oder eine Exception wirft,
-        # da das `websockets.serve` Framework die Verbindung schließt.
-        # Aber zur expliziten Klarheit und für Fälle, wo der Handler "hängen" könnte ohne Exception:
-        if talkdesk_ws and talkdesk_ws.open: # talkdesk_ws.open prüft, ob die Verbindung noch offen ist
+        # 2. Aufräumen der TalkDesk-Verbindung (jetzt auch mit .state)
+        if talkdesk_ws: # Zuerst prüfen, ob talkdesk_ws überhaupt existiert/initialisiert wurde
             try:
-                logger.info(f"Sicherstellen, dass die TalkDesk WebSocket Verbindung zu {remote_addr} geschlossen wird.")
-                await asyncio.wait_for(talkdesk_ws.close(code=1000, reason="Handler cleanup complete"), timeout=2.0)
-                logger.info(f"TalkDesk WebSocket Verbindung zu {remote_addr} explizit geschlossen.")
+                # Verwende .state, um den Zustand der TalkDesk-Verbindung zu prüfen
+                if talkdesk_ws.state == State.OPEN:
+                    logger.info(f"TalkDesk WebSocket (state == OPEN) zu {remote_addr} wird explizit geschlossen.")
+                    await asyncio.wait_for(talkdesk_ws.close(code=1000, reason="Handler cleanup complete"), timeout=2.0)
+                    # wait_closed() ist für Server-seitige Verbindungen oft weniger kritisch
+                    # await asyncio.wait_for(talkdesk_ws.wait_closed(), timeout=2.0)
+                    logger.info(f"TalkDesk WebSocket Verbindung zu {remote_addr} explizit geschlossen.")
+                elif talkdesk_ws.state == State.CLOSED:
+                    logger.info(f"TalkDesk WebSocket Verbindung zu {remote_addr} war bereits geschlossen (state={talkdesk_ws.state}).")
+                else: # z.B. State.CLOSING
+                    logger.warning(f"TalkDesk WebSocket zu {remote_addr} in state={talkdesk_ws.state} beim Aufräumen. Übergabe an Server-Framework zum Abschluss.")
+            except AttributeError as e_attr_td: # Falls talkdesk_ws kein .state hat (sollte nicht passieren)
+                 logger.error(f"AttributeError beim Zugriff auf talkdesk_ws.state für {remote_addr}. talkdesk_ws={talkdesk_ws}", exc_info=True)
+            except websockets.exceptions.ConnectionClosed:
+                logger.info(f"TalkDesk WebSocket Verbindung zu {remote_addr} war bereits geschlossen (ConnectionClosed Exception), als explizites Schließen versucht wurde.")
             except asyncio.TimeoutError:
                 logger.warning(f"Timeout beim expliziten Schließen der TalkDesk Verbindung zu {remote_addr}.")
-            except websockets.exceptions.ConnectionClosed:
-                logger.info(f"TalkDesk WebSocket Verbindung zu {remote_addr} war bereits geschlossen, als explizites Schließen versucht wurde.")
-            except Exception as e_td_close: # Andere Fehler beim Schließen der TalkDesk-Verbindung
-                logger.error(f"Fehler beim expliziten Schließen der TalkDesk Verbindung zu {remote_addr}: {e_td_close}", exc_info=True)
+            except Exception as e_td_close: # Andere Fehler beim Schließen
+                logger.error(f"Genereller Fehler beim expliziten Schließen der TalkDesk Verbindung zu {remote_addr}: {e_td_close}", exc_info=True)
         else:
-            logger.info(f"TalkDesk WebSocket Verbindung zu {remote_addr} war beim finalen Aufräumen bereits geschlossen oder nicht initialisiert.")
-
+            logger.info(f"TalkDesk WebSocket Verbindung zu {remote_addr} war beim finalen Aufräumen nicht initialisiert (None).")
 
 async def main():
     try:
-        import httpx # Sicherstellen, dass httpx verfügbar ist
+        import httpx
     except ImportError:
         logger.error("Modul 'httpx' nicht gefunden! Stelle sicher, dass es in requirements.txt steht und installiert ist.")
         sys.exit(1)
@@ -276,16 +276,16 @@ async def main():
     logger.info(f"Starte PoC WebSocket Server auf {WEBSOCKET_HOST}:{WEBSOCKET_PORT}")
     try:
         async with websockets.serve(handle_connection, WEBSOCKET_HOST, WEBSOCKET_PORT):
-            await asyncio.Future()  # Hält den Server am Laufen, bis er gestoppt wird
+            await asyncio.Future()
     except OSError as e:
-        if e.errno == 98: # EADDRINUSE
+        if e.errno == 98:
             logger.error(f"Port {WEBSOCKET_PORT} wird bereits verwendet!")
         else:
             logger.error(f"Server konnte nicht gestartet werden (OS Error {e.errno}): {e}", exc_info=True)
-        sys.exit(1) # Beende das Skript bei Server-Startfehler
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Server konnte nicht gestartet werden oder ist abgestürzt: {e}", exc_info=True)
-        sys.exit(1) # Beende das Skript bei Server-Startfehler
+        sys.exit(1)
 
 if __name__ == "__main__":
     try:
