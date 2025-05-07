@@ -62,65 +62,118 @@ async def get_elevenlabs_signed_url():
         logger.error(f"Allgemeiner Fehler beim Abrufen der Signed URL: {e}", exc_info=True)
         return None
 
-# --- WebSocket Handler (minimal für PoC) ---
+# --- WebSocket Handler (MODIFIZIERT) ---
 async def handle_connection(talkdesk_ws):
     """Verwaltet eine einzelne WebSocket-Verbindung von TalkDesk."""
     remote_addr = talkdesk_ws.remote_address
-    logger.info(f"+++ Neue Verbindung von TalkDesk: {remote_addr}")
+    logger.info(f"+++ Neue Verbindung (möglicherweise TalkDesk): {remote_addr}") # Log-Nachricht angepasst
 
     elevenlabs_ws = None
     stream_sid = None # Wichtig für spätere Antworten
 
     try:
-        # 1. Warte auf die erste Nachricht (sollte "start" sein)
-        try:
-            start_message_str = await asyncio.wait_for(talkdesk_ws.recv(), timeout=15.0)
-            logger.info("Erste Nachricht von TalkDesk erhalten.")
-            logger.debug(f"Raw Start Message: {start_message_str}")
-        except asyncio.TimeoutError:
-            logger.error(f"Timeout (15s) beim Warten auf Start-Nachricht von {remote_addr}.")
-            return
-        except Exception as e:
-             logger.error(f"Fehler beim Empfangen der Start-Nachricht: {e}", exc_info=True)
-             return
+        # --- BEGINN DES ERSETZTEN/MODIFIZIERTEN BLOCKS (aus vorheriger Antwort) ---
+        start_data = None
+        start_message_str_for_logging = None # Für vollständiges Logging der rohen Start-Nachricht
 
-        # Parse Start Nachricht (um stream_sid zu bekommen und Parameter zu loggen)
-        try:
-            start_data = json.loads(start_message_str)
-            event = start_data.get("event")
-            if event != "start":
-                logger.error(f"Erste Nachricht war kein 'start'-Event, sondern '{event}'. Beende.")
+        # Schleife, um Nachrichten zu lesen, bis 'start' gefunden wird oder Timeout/Fehler
+        message_count = 0
+        max_initial_messages = 5  # Max. 5 initiale Nachrichten lesen, bevor wir aufgeben
+
+        while message_count < max_initial_messages:
+            message_count += 1
+            logger.debug(f"Warte auf Nachricht #{message_count} von Client {remote_addr}...")
+            try:
+                # Timeout für jede einzelne Nachricht, nicht nur die erste
+                message_str = await asyncio.wait_for(talkdesk_ws.recv(), timeout=10.0) # Timeout leicht erhöht
+                logger.info(f"Nachricht #{message_count} von Client {remote_addr} erhalten.")
+                logger.debug(f"Raw Message #{message_count}: {message_str}")
+            except asyncio.TimeoutError:
+                logger.error(f"Timeout (10s) beim Warten auf Nachricht #{message_count} von {remote_addr}.")
+                if message_count == 1 and not start_data: # Wenn schon die erste Nachricht timed out
+                    return
+                continue # Versuche, die Schleife fortzusetzen, wenn nicht die erste Nachricht
+            except websockets.exceptions.ConnectionClosed:
+                logger.info(f"Verbindung von Client {remote_addr} geschlossen während Warten auf Nachricht #{message_count}.")
+                return
+            except Exception as e:
+                logger.error(f"Fehler beim Empfangen der Nachricht #{message_count} von {remote_addr}: {e}", exc_info=True)
                 return
 
-            # TODO: Passe die Schlüssel hier an die *echte* TalkDesk JSON Struktur an!
-            start_info = start_data.get("start", {})
-            stream_sid = start_info.get("stream_sid")
-            call_sid = start_info.get("call_sid", "UnknownCall")
-            custom_params = start_info.get("customParameters", {}) # VERMUTUNG!
-            media_format = start_info.get("mediaFormat", {})
+            try:
+                data = json.loads(message_str)
+                event = data.get("event")
 
-            if not stream_sid:
-                logger.error("Keine 'stream_sid' im Start-Event gefunden. Beende.")
+                if event == "connected":
+                    logger.info(f"'{event}'-Event von {remote_addr} empfangen und ignoriert.")
+                    continue  # Nächste Nachricht lesen
+
+                elif event == "start":
+                    logger.info(f"'start'-Event von {remote_addr} gefunden!")
+                    start_data = data  # Das sind die wichtigen Daten
+                    start_message_str_for_logging = message_str # Für vollständiges Logging speichern
+                    break  # Schleife verlassen, wir haben, was wir brauchen
+
+                elif event == "media":
+                    logger.warning(f"Unerwartetes 'media'-Event von {remote_addr} während der Initialisierung empfangen (Nachricht #{message_count}). Ignoriere vorerst.")
+                    continue
+
+                else:
+                    logger.warning(f"Unbekanntes Event '{event}' in Nachricht #{message_count} von {remote_addr} empfangen. Ignoriere: {message_str[:200]}...") # Log gekürzt
+                    continue
+
+            except json.JSONDecodeError:
+                logger.error(f"Konnte Nachricht #{message_count} von {remote_addr} nicht als JSON parsen: {message_str[:200]}...")
+                continue
+            except Exception as e:
+                logger.error(f"Fehler beim Verarbeiten der geparsten Nachricht #{message_count} von {remote_addr}: {e}", exc_info=True)
                 return
 
-            logger.info(f"Anruf gestartet: CallSid={call_sid}, StreamSid={stream_sid}")
-            logger.info(f"Empfangene Media Format Info: {media_format}")
-            logger.info(f"Empfangene Custom Parameters (VERMUTUNG!): {custom_params}") # Loggen, was ankommt!
-
-        except json.JSONDecodeError:
-            logger.error(f"Konnte Start-Nachricht nicht als JSON parsen: {start_message_str}")
-            return
-        except Exception as e:
-            logger.error(f"Fehler beim Verarbeiten der Start-Nachricht: {e}", exc_info=True)
+        # Nach der Schleife: Haben wir das start_data gefunden?
+        if not start_data:
+            logger.error(f"Kein 'start'-Event von {remote_addr} innerhalb der ersten {max_initial_messages} Nachrichten oder durch Timeout gefunden. Beende.")
             return
 
-        # --- Verbindung zu Elevenlabs aufbauen ---
+        # Ab hier kann der Code weitergehen, der start_data verarbeitet
+        logger.info(f"--- Vollständige Start-Nachricht von {remote_addr} zur Analyse ---")
+        logger.info(start_message_str_for_logging)
+        logger.info(f"--- Verarbeitete Start-Daten von {remote_addr} zur Analyse (pretty-printed) ---")
+        try:
+            logger.info(json.dumps(start_data, indent=2))
+        except Exception:
+             logger.info(str(start_data))
+
+        # Extrahiere die Informationen aus start_data
+        start_info = start_data.get("start", {})
+        if not start_info:
+            logger.error(f"Das 'start'-Event von {remote_addr} enthält keinen 'start'-Schlüssel mit Details. Inhalt: {start_data}")
+            return
+
+        stream_sid = start_info.get("stream_sid")
+        call_sid = start_info.get("call_sid", f"UnknownCall_{remote_addr}")
+        custom_params = start_info.get("customParameters")
+        if custom_params is None:
+            custom_params = start_info.get("custom_parameters", {})
+        media_format = start_info.get("mediaFormat", {})
+        account_sid_top = start_data.get("account_sid", "UnknownAccount")
+        call_sid_top = start_data.get("call_sid", "UnknownCall")
+
+        if not stream_sid:
+            logger.error(f"Keine 'stream_sid' im Start-Event von {remote_addr} gefunden. Inhalt des 'start'-Objekts: {start_info}")
+            return
+
+        logger.info(f"Anruf gestartet: CallSid (aus 'start'-Objekt)='{call_sid}', StreamSid='{stream_sid}', AccountSid (Top-Level)='{account_sid_top}', CallSid (Top-Level)='{call_sid_top}'")
+        logger.info(f"Empfangene Media Format Info von {remote_addr}: {media_format}")
+        logger.info(f"Empfangene Custom Parameters von {remote_addr} (Schlüssel 'customParameters' oder 'custom_parameters'?): {custom_params}")
+        # --- ENDE DES ERSETZTEN/MODIFIZIERTEN BLOCKS ---
+
+        # --- Verbindung zu Elevenlabs aufbauen (wie zuvor) ---
         signed_url = await get_elevenlabs_signed_url()
         if not signed_url:
-            raise ConnectionAbortedError("Konnte keine Signed URL von Elevenlabs erhalten.")
+            raise ConnectionAbortedError(f"Konnte keine Signed URL von Elevenlabs für {remote_addr} erhalten.")
 
         elevenlabs_ws = await websockets.connect(signed_url)
-        logger.info("Verbindung zu Elevenlabs WebSocket hergestellt.")
+        logger.info(f"Verbindung zu Elevenlabs WebSocket für {remote_addr} hergestellt.")
 
         # --- Initiale Konfiguration an Elevenlabs senden (PoC mit Env Vars) ---
         initial_config = {
@@ -133,34 +186,53 @@ async def handle_connection(talkdesk_ws):
             initial_config["conversation_config_override"]["agent"]["first_message"] = POC_FIRST_MESSAGE
 
         await elevenlabs_ws.send(json.dumps(initial_config))
-        logger.info(f"Initiale Konfiguration an Elevenlabs gesendet: Prompt='{POC_PROMPT}'")
+        logger.info(f"Initiale Konfiguration an Elevenlabs für {remote_addr} gesendet: Prompt='{POC_PROMPT}'")
 
-        # --- HIER IST SCHLUSS FÜR DEN PoC ---
-        # Wir implementieren das Audio-Handling noch nicht.
-        # Wir lassen die Verbindung einfach offen und loggen nur noch, wenn TalkDesk schließt.
-        logger.info("Proof of Concept: Verbindung zu TalkDesk und ElevenLabs steht. Warte auf Schließen der Verbindung...")
+        logger.info(f"Proof of Concept für {remote_addr}: Verbindung zu TalkDesk und ElevenLabs steht. Warte auf weitere Nachrichten oder Schließen der Verbindung...")
 
-        # Einfache Schleife, um auf das Schließen durch TalkDesk zu warten
+        # --- Modifizierte Schleife zum Ignorieren von Nachrichten NACH dem Start ---
         async for message in talkdesk_ws:
-             logger.debug(f"Weitere Nachricht von TalkDesk ignoriert (PoC): {message[:100]}...") # Logge nur Anfang
-             pass # Ignoriere weitere Nachrichten im PoC
-
+            try:
+                if isinstance(message, str):
+                    msg_data = json.loads(message)
+                    evt = msg_data.get("event", "unknown")
+                    if evt == "media":
+                        payload_preview = msg_data.get("media", {}).get("payload", "")[:20] + "..."
+                        logger.debug(f"Weitere 'media'-Nachricht von {remote_addr} (Payload: {payload_preview}) ignoriert (PoC).")
+                    elif evt == "stop":
+                        logger.info(f"'stop'-Event von TalkDesk {remote_addr} empfangen: {message[:200]}")
+                        break
+                    else:
+                        logger.debug(f"Weitere Text-Nachricht von {remote_addr} (Typ: {evt}) ignoriert (PoC): {message[:100]}...")
+                elif isinstance(message, bytes):
+                    logger.debug(f"Weitere BINÄRE Nachricht von {remote_addr} ignoriert (PoC): {len(message)} bytes")
+                else:
+                    logger.debug(f"Weitere unbekannte Nachricht (Typ: {type(message)}) von {remote_addr} ignoriert (PoC).")
+            except json.JSONDecodeError:
+                 logger.warning(f"Konnte weitere Nachricht von {remote_addr} nicht als JSON parsen (ignoriert): {message[:100]}...")
+            except Exception as e:
+                logger.warning(f"Konnte weitere Nachricht von {remote_addr} nicht verarbeiten/loggen (ignoriert): {e}")
+            pass
 
     except websockets.exceptions.ConnectionClosedOK:
-        logger.info(f"Verbindung von TalkDesk {remote_addr} normal geschlossen.")
+        logger.info(f"Verbindung von Client {remote_addr} normal geschlossen (ClosedOK).")
     except websockets.exceptions.ConnectionClosedError as e:
-        logger.error(f"Verbindung von TalkDesk {remote_addr} unerwartet geschlossen: Code={e.code}, Grund='{e.reason}'")
-    except ConnectionAbortedError as e:
-         logger.error(f"Verbindung abgebrochen für {remote_addr}: {e}")
+        logger.error(f"Verbindung von Client {remote_addr} unerwartet geschlossen (ClosedError): Code={e.code}, Grund='{e.reason}'")
+    except ConnectionAbortedError as e: # Für unsere eigene Logik, wenn wir abbrechen
+         logger.error(f"Verarbeitung für {remote_addr} aktiv abgebrochen: {e}")
     except Exception as e:
         logger.error(f"Unerwarteter Fehler im Haupt-Handler für {remote_addr}: {e}", exc_info=True)
     finally:
         logger.info(f"Beende Handler für {remote_addr}. Räume auf...")
-        # Elevenlabs WebSocket schließen (falls er geöffnet wurde)
         if elevenlabs_ws and elevenlabs_ws.open:
-            logger.info("Schließe Elevenlabs WebSocket Verbindung...")
-            await elevenlabs_ws.close(code=1000, reason='PoC Handler finished')
-            logger.info("Elevenlabs WebSocket aufgeräumt.")
+            logger.info(f"Schließe Elevenlabs WebSocket Verbindung für {remote_addr}...")
+            try:
+                await asyncio.wait_for(elevenlabs_ws.close(code=1000, reason='PoC Handler finished'), timeout=5.0)
+                logger.info(f"Elevenlabs WebSocket für {remote_addr} aufgeräumt.")
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout beim Schließen der Elevenlabs WebSocket Verbindung für {remote_addr}.")
+            except Exception as e:
+                logger.error(f"Fehler beim Schließen der Elevenlabs WebSocket für {remote_addr}: {e}", exc_info=True)
 
 
 # --- Hauptfunktion zum Starten des Servers ---
