@@ -6,10 +6,10 @@ import json
 import base64
 import httpx  # Für HTTP-Anfragen (Signed URL)
 import sys   # Für sys.exit beim Fehler
-from websockets.enums import ConnectionState # <--- KORRIGIERTER IMPORT
+from websockets.protocol import ConnectionState # <--- ERNEUT KORRIGIERTER IMPORT
 
 # SCRIPT VERSION FÜR LOGGING
-SCRIPT_VERSION = "3.2 - ConnectionState Import Fix"
+SCRIPT_VERSION = "3.3 - ConnectionState Import Fix Attempt 2"
 
 # --- Konfiguration ---
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
@@ -153,7 +153,7 @@ async def handle_connection(talkdesk_ws):
             "type": "conversation_initiation_client_data",
             "conversation_config_override": {"agent": {"prompt": {"prompt": POC_PROMPT}}}
         }
-        # if POC_FIRST_MESSAGE: # Erst wieder aktivieren, wenn der Rest stabil läuft
+        # if POC_FIRST_MESSAGE: # Vorerst auskommentiert lassen
         #    initial_config["conversation_config_override"]["agent"]["first_message"] = POC_FIRST_MESSAGE
 
         await elevenlabs_ws.send(json.dumps(initial_config))
@@ -195,7 +195,7 @@ async def handle_connection(talkdesk_ws):
     finally:
         logger.info(f"Beende Handler für {remote_addr}. Räume auf...")
         if elevenlabs_ws:
-            if elevenlabs_ws.state == ConnectionState.OPEN: # KORREKTE PRÜFUNG
+            if elevenlabs_ws.state == ConnectionState.OPEN:
                 logger.info(f"Schließe Elevenlabs WebSocket Verbindung für {remote_addr} (State: OPEN)...")
                 try:
                     await asyncio.wait_for(elevenlabs_ws.close(code=1000, reason='Handler finished normally'), timeout=5.0)
