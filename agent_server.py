@@ -1,15 +1,27 @@
 import asyncio
-import websockets
+import websockets # Importiere das Hauptmodul zuerst
 import os
 import logging
 import json
 import base64
-import httpx  # Für HTTP-Anfragen (Signed URL)
-import sys   # Für sys.exit beim Fehler
-from websockets.protocol import ConnectionState # <--- ERNEUT KORRIGIERTER IMPORT
+import httpx
+import sys
 
 # SCRIPT VERSION FÜR LOGGING
-SCRIPT_VERSION = "3.3 - ConnectionState Import Fix Attempt 2"
+SCRIPT_VERSION = "3.4 - Get Websockets Version"
+
+# --- Logging Setup ---
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
+
+# !!! WICHTIG: Logge die Websockets-Version !!!
+try:
+    logger.info(f"WEBSOCKETS LIBRARY VERSION: {websockets.__version__}")
+except Exception as e:
+    logger.error(f"Konnte websockets.__version__ nicht abrufen: {e}")
+
 
 # --- Konfiguration ---
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
@@ -18,11 +30,6 @@ POC_PROMPT = os.environ.get("ELEVENLABS_POC_PROMPT", "You are a test assistant. 
 POC_FIRST_MESSAGE = os.environ.get("ELEVENLABS_POC_FIRST_MESSAGE", "Hello test call.")
 WEBSOCKET_HOST = "0.0.0.0"
 WEBSOCKET_PORT = 8080
-
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
 
 if not ELEVENLABS_API_KEY:
     logger.error("Umgebungsvariable ELEVENLABS_API_KEY nicht gesetzt!")
@@ -48,16 +55,10 @@ async def get_elevenlabs_signed_url():
                  logger.info("Signed URL erfolgreich erhalten.")
                  return signed_url
             else:
-                 logger.error(f"Keine signed_url in der Antwort von Elevenlabs gefunden. Antwort: {data}")
+                 logger.error(f"Keine signed_url in der Antwort von Elevenlabs. Antwort: {data}")
                  return None
-    except httpx.HTTPStatusError as e:
-         logger.error(f"HTTP-Fehler beim Abrufen der Signed URL: {e.response.status_code} - {e.response.text}")
-         return None
-    except httpx.RequestError as e:
-         logger.error(f"Netzwerkfehler bei der Anfrage an Elevenlabs (Signed URL): {e}")
-         return None
     except Exception as e:
-        logger.error(f"Allgemeiner Fehler beim Abrufen der Signed URL: {e}", exc_info=True)
+        logger.error(f"Fehler beim Abrufen der Signed URL: {e}", exc_info=True)
         return None
 
 async def handle_connection(talkdesk_ws):
@@ -86,7 +87,7 @@ async def handle_connection(talkdesk_ws):
                 logger.info(f"Verbindung von Client {remote_addr} geschlossen während Warten auf Nachricht #{message_count}.")
                 return
             except Exception as e:
-                logger.error(f"Fehler beim Empfangen der Nachricht #{message_count} von {remote_addr}: {e}", exc_info=True)
+                logger.error(f"Fehler Empfangen Nachricht #{message_count} von {remote_addr}: {e}", exc_info=True)
                 return
             try:
                 data = json.loads(message_str)
@@ -131,14 +132,12 @@ async def handle_connection(talkdesk_ws):
         account_sid_from_start = start_info.get("accountSid")
         media_format = start_info.get("mediaFormat", {})
         custom_params = start_info.get("customParameters", {})
-        account_sid_top = start_data.get("account_sid", "UnknownAccount")
-        call_sid_top = start_data.get("call_sid", "UnknownCall")
 
         if not stream_sid:
             logger.error(f"Kein 'streamSid' im 'start'-Objekt von {remote_addr}: {start_info}")
             return
 
-        logger.info(f"Anruf gestartet: CallSid='{call_sid}', StreamSid='{stream_sid}', AccountSid(Start)='{account_sid_from_start}', AccountSid(Top)='{account_sid_top}'")
+        logger.info(f"Anruf gestartet: CallSid='{call_sid}', StreamSid='{stream_sid}'")
         logger.info(f"Media Format von {remote_addr}: {media_format}")
         logger.info(f"Custom Parameters von {remote_addr}: {custom_params}")
 
@@ -153,7 +152,7 @@ async def handle_connection(talkdesk_ws):
             "type": "conversation_initiation_client_data",
             "conversation_config_override": {"agent": {"prompt": {"prompt": POC_PROMPT}}}
         }
-        # if POC_FIRST_MESSAGE: # Vorerst auskommentiert lassen
+        # if POC_FIRST_MESSAGE: # Vorerst auskommentiert
         #    initial_config["conversation_config_override"]["agent"]["first_message"] = POC_FIRST_MESSAGE
 
         await elevenlabs_ws.send(json.dumps(initial_config))
@@ -161,60 +160,41 @@ async def handle_connection(talkdesk_ws):
 
         logger.info(f"PoC für {remote_addr}: Verbindung zu TalkDesk & ElevenLabs steht. Warte...")
 
-        async for message in talkdesk_ws:
+        async for message in talkdesk_ws: # Loop um Nachrichten von TalkDesk zu empfangen
+            # Hier würde die Logik zum Weiterleiten von TalkDesk-Audio an ElevenLabs stehen
+            # und zum Empfangen von Audio von ElevenLabs und Weiterleiten an TalkDesk
+            # Für den PoC ignorieren wir die meisten Nachrichten und warten auf "stop"
             try:
                 if isinstance(message, str):
                     msg_data = json.loads(message)
-                    evt = msg_data.get("event", "unknown")
-                    if evt == "media":
-                        payload_preview = msg_data.get("media", {}).get("payload", "")[:20] + "..."
-                        logger.debug(f"Media von {remote_addr} (Payload: {payload_preview}) ignoriert (PoC).")
-                    elif evt == "stop":
+                    evt = msg_data.get("event")
+                    if evt == "stop":
                         logger.info(f"'stop'-Event von TalkDesk {remote_addr} empfangen: {message[:200]}")
-                        break
+                        break 
+                    elif evt == "media":
+                         logger.debug(f"Ignoriere 'media' event von TalkDesk für {remote_addr}")
                     else:
-                        logger.debug(f"Text-Nachricht von {remote_addr} (Typ: {evt}) ignoriert (PoC): {message[:100]}...")
-                elif isinstance(message, bytes):
-                    logger.debug(f"Binäre Nachricht von {remote_addr} ignoriert (PoC): {len(message)} bytes")
-                else:
-                    logger.debug(f"Unbekannte Nachricht (Typ: {type(message)}) von {remote_addr} ignoriert (PoC).")
-            except json.JSONDecodeError:
-                 logger.warning(f"Konnte Nachricht von {remote_addr} nicht als JSON parsen: {message[:100]}...")
-            except Exception as e:
-                logger.warning(f"Fehler bei Verarbeitung Nachricht von {remote_addr}: {e}")
+                         logger.debug(f"Ignoriere anderes Text-Event von TalkDesk {evt} für {remote_addr}")
+            except Exception:
+                logger.debug(f"Konnte Nachricht von TalkDesk nicht als JSON parsen oder verarbeiten: {message[:100]}")
             pass
 
-    except websockets.exceptions.ConnectionClosedOK:
-        logger.info(f"Verbindung von Client {remote_addr} normal geschlossen (ClosedOK).")
-    except websockets.exceptions.ConnectionClosedError as e:
-        logger.error(f"Verbindung von Client {remote_addr} unerwartet geschlossen (ClosedError): Code={e.code}, Grund='{e.reason}'")
-    except ConnectionAbortedError as e:
-         logger.error(f"Verarbeitung für {remote_addr} aktiv abgebrochen: {e}")
-    except Exception as e:
+
+    except Exception as e: # Breiteres Exception-Handling für die Hauptlogik
         logger.error(f"Unerwarteter Fehler im Haupt-Handler für {remote_addr}: {e}", exc_info=True)
     finally:
         logger.info(f"Beende Handler für {remote_addr}. Räume auf...")
         if elevenlabs_ws:
-            if elevenlabs_ws.state == ConnectionState.OPEN:
-                logger.info(f"Schließe Elevenlabs WebSocket Verbindung für {remote_addr} (State: OPEN)...")
-                try:
-                    await asyncio.wait_for(elevenlabs_ws.close(code=1000, reason='Handler finished normally'), timeout=5.0)
-                    logger.info(f"Elevenlabs WebSocket für {remote_addr} aufgeräumt.")
-                except asyncio.TimeoutError:
-                    logger.warning(f"Timeout beim Schließen der Elevenlabs WebSocket für {remote_addr}.")
-                except Exception as e:
-                    logger.error(f"Fehler beim Schließen der Elevenlabs WebSocket für {remote_addr}: {e}", exc_info=True)
-            elif elevenlabs_ws.state == ConnectionState.CLOSED:
-                 logger.info(f"Elevenlabs WebSocket für {remote_addr} war bereits geschlossen.")
-            else:
-                 logger.warning(f"Elevenlabs WebSocket für {remote_addr} in Zustand ({elevenlabs_ws.state}) beim Aufräumen. Versuche trotzdem zu schließen.")
-                 try:
-                    await asyncio.wait_for(elevenlabs_ws.close(code=1008, reason='Closing from unexpected state'), timeout=5.0)
-                    logger.info(f"Elevenlabs WebSocket für {remote_addr} (aus unerwartetem Zustand) aufgeräumt.")
-                 except Exception as e:
-                    logger.error(f"Fehler beim Schließen des Elevenlabs WebSockets (aus unerwartetem Zustand) für {remote_addr}: {e}", exc_info=True)
+            # Vereinfachtes Schließen für diesen Test, um Import-Probleme zu umgehen
+            logger.info(f"Versuche Elevenlabs WebSocket für {remote_addr} zu schließen (vereinfacht)...")
+            try:
+                await asyncio.wait_for(elevenlabs_ws.close(code=1000, reason='Handler finished'), timeout=2.0)
+                logger.info(f"Elevenlabs WebSocket für {remote_addr} geschlossen.")
+            except Exception as e:
+                logger.error(f"Fehler beim vereinfachten Schließen des Elevenlabs WS: {e}", exc_info=True)
         else:
-             logger.info(f"Keine (initialisierte) Elevenlabs WebSocket Verbindung zum Schließen für {remote_addr} vorhanden.")
+            logger.info(f"Keine Elevenlabs WS-Verbindung zum Schließen vorhanden für {remote_addr}.")
+
 
 async def main():
     try:
