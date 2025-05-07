@@ -3,14 +3,14 @@ import websockets # Importiere das Hauptmodul zuerst
 import os
 import logging
 import json
-import base64 # Wird jetzt benötigt für Audio
+import base64
 import httpx
 import sys
 from websockets.connection import State
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, ConnectionClosedError
 
 # SCRIPT VERSION FÜR LOGGING
-SCRIPT_VERSION = "3.16 - Implemented Audio Streaming Logic" # NEU
+SCRIPT_VERSION = "3.17 - Enhanced EL RX Logging & Audio Passthrough" # NEU
 
 # --- Logging Setup ---
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -60,9 +60,7 @@ async def get_elevenlabs_signed_url():
         logger.error(f"Fehler beim Abrufen der Signed URL: {e}", exc_info=True)
         return None
 
-# === AUDIO STREAMING TASK FUNKTIONEN (Innerhalb von handle_connection definiert) ===
 async def stream_talkdesk_to_elevenlabs(td_ws, el_ws, remote_addr_log):
-    """Empfängt Audio von TalkDesk und sendet es an ElevenLabs."""
     logger.info(f"[{remote_addr_log}] Starte Task: TalkDesk -> ElevenLabs Audio Streaming")
     message_counter = 0
     try:
@@ -76,32 +74,24 @@ async def stream_talkdesk_to_elevenlabs(td_ws, el_ws, remote_addr_log):
                     payload = data.get("media", {}).get("payload")
                     if payload:
                         try:
-                            # Schritt 1: Base64 dekodieren (rohe µ-law Bytes)
-                            # raw_audio_bytes = base64.b64decode(payload)
-                            # Schritt 2: Für ElevenLabs vorbereiten (JSON mit Base64)
-                            # Wichtig: Wir verwenden den *originalen* Base64-String von TalkDesk!
-                            #          Kein Dekodieren/Rekodieren nötig, wenn EL Base64 erwartet.
+                            # Sende den originalen Base64-Payload von TalkDesk direkt weiter.
+                            # Das Format {"user_audio_chunk": "BASE64_AUDIO_PAYLOAD"} wurde aus der Doku abgeleitet.
                             elevenlabs_message = {
-                                "user_audio_chunk": payload # Direkte Weitergabe des Base64-Strings
+                                "user_audio_chunk": payload
                             }
-                            # Schritt 3: An ElevenLabs senden, wenn Verbindung offen
                             if el_ws and el_ws.state == State.OPEN:
                                 await el_ws.send(json.dumps(elevenlabs_message))
                                 logger.debug(f"[{remote_addr_log}] TD -> EL: Media Chunk #{message_counter} (Payload L: {len(payload)}) an ElevenLabs gesendet.")
                             else:
                                 logger.warning(f"[{remote_addr_log}] TD -> EL: ElevenLabs WS nicht offen (State: {el_ws.state if el_ws else 'None'}), konnte Chunk #{message_counter} nicht senden.")
-                                # Optional: Task beenden, wenn EL nicht mehr offen ist
-                                # break
+                                break # Task beenden, wenn EL nicht mehr offen ist
                         except Exception as e_inner:
                              logger.error(f"[{remote_addr_log}] TD -> EL: Fehler bei Verarbeitung/Senden von Media Chunk #{message_counter}: {e_inner}", exc_info=True)
 
                 elif event == "stop":
                     logger.info(f"[{remote_addr_log}] TD -> EL: Stop Event in Stream-Task empfangen, beende Task.")
-                    break # Task beenden
-
-                # Andere Events wie 'connected', 'start' werden ignoriert
-                # (sie wurden bereits im Hauptteil behandelt oder sind hier irrelevant)
-
+                    break
+                # Andere Events werden ignoriert, da die Haupt-Schleife sie ggf. behandelt oder sie hier irrelevant sind.
             except json.JSONDecodeError:
                  logger.warning(f"[{remote_addr_log}] TD -> EL: Konnte Nachricht #{message_counter} nicht als JSON parsen: {message_str[:100]}")
             except Exception as e:
@@ -117,11 +107,11 @@ async def stream_talkdesk_to_elevenlabs(td_ws, el_ws, remote_addr_log):
         logger.info(f"[{remote_addr_log}] Beende Task: TalkDesk -> ElevenLabs Audio Streaming (Nach {message_counter} Nachrichten)")
 
 async def stream_elevenlabs_to_talkdesk(td_ws, el_ws, stream_sid_from_td, remote_addr_log):
-    """Empfängt Audio von ElevenLabs und sendet es an TalkDesk."""
     logger.info(f"[{remote_addr_log}] Starte Task: ElevenLabs -> TalkDesk Audio Streaming")
     message_counter = 0
     try:
-        async for message_str in el_ws:
+        async for message_str in el_ws: # NEUES LOGGING HIER EINGEFÜGT
+            logger.debug(f"[{remote_addr_log}] EL -> TD: RAW Message von EL: {message_str}")
             message_counter += 1
             try:
                 data = json.loads(message_str)
@@ -130,19 +120,16 @@ async def stream_elevenlabs_to_talkdesk(td_ws, el_ws, stream_sid_from_td, remote
                 if msg_type == "audio":
                     b64_audio = data.get("audio_event", {}).get("audio_base_64")
                     if b64_audio:
-                        # Schritt 1: TalkDesk Nachricht erstellen
                         talkdesk_message = {
                            "event": "media",
-                           "streamSid": stream_sid_from_td, # Wichtig: Den korrekten StreamSid verwenden
-                           "media": {"payload": b64_audio} # Direkte Weitergabe des Base64-Strings
+                           "streamSid": stream_sid_from_td,
+                           "media": {"payload": b64_audio}
                         }
-                        # Schritt 2: An TalkDesk senden, wenn Verbindung offen
                         if td_ws and td_ws.state == State.OPEN:
                            await td_ws.send(json.dumps(talkdesk_message))
                            logger.debug(f"[{remote_addr_log}] EL -> TD: Audio Chunk #{message_counter} (Payload L: {len(b64_audio)}) an TalkDesk gesendet.")
                         else:
                             logger.warning(f"[{remote_addr_log}] EL -> TD: TalkDesk WS nicht offen (State: {td_ws.state if td_ws else 'None'}), konnte Audio Chunk #{message_counter} nicht senden.")
-                            # Task beenden, wenn TalkDesk nicht mehr offen ist
                             break
                     else:
                         logger.warning(f"[{remote_addr_log}] EL -> TD: 'audio' Event ohne 'audio_base_64' empfangen: {data}")
@@ -152,12 +139,9 @@ async def stream_elevenlabs_to_talkdesk(td_ws, el_ws, stream_sid_from_td, remote
                 elif msg_type == "user_transcript":
                      logger.info(f"[{remote_addr_log}] EL -> TD: User Transcript: {data.get('user_transcription_event', {}).get('user_transcript')}")
                 elif msg_type == "ping":
-                     # Optional: Ping-Nachrichten loggen oder ignorieren
                      logger.debug(f"[{remote_addr_log}] EL -> TD: Ping Event empfangen: {data}")
-                     # Hinweis: Der websockets Client sollte Pongs automatisch senden.
-                # Andere Events von EL (interruption, vad_score, etc.) könnten hier behandelt werden
-                else:
-                    logger.debug(f"[{remote_addr_log}] EL -> TD: Ignoriere Nachrichtentyp '{msg_type}': {data}")
+                else: # Alle anderen Nachrichtentypen von ElevenLabs
+                    logger.info(f"[{remote_addr_log}] EL -> TD: Unbehandelter Nachrichtentyp '{msg_type}' von ElevenLabs: {data}")
 
             except json.JSONDecodeError:
                  logger.warning(f"[{remote_addr_log}] EL -> TD: Konnte Nachricht #{message_counter} nicht als JSON parsen: {message_str[:100]}")
@@ -172,7 +156,6 @@ async def stream_elevenlabs_to_talkdesk(td_ws, el_ws, stream_sid_from_td, remote
         logger.error(f"[{remote_addr_log}] EL -> TD: Unerwarteter Fehler im Streaming Task: {e}", exc_info=True)
     finally:
         logger.info(f"[{remote_addr_log}] Beende Task: ElevenLabs -> TalkDesk Audio Streaming (Nach {message_counter} Nachrichten)")
-# === ENDE AUDIO STREAMING TASK FUNKTIONEN ===
 
 async def handle_connection(talkdesk_ws):
     remote_addr = talkdesk_ws.remote_address
@@ -183,7 +166,6 @@ async def handle_connection(talkdesk_ws):
     audio_tasks = []
 
     try:
-        # === Initialisierungsphase (wie in v3.15) ===
         start_data = None
         start_message_str_for_logging = None
         message_count = 0
@@ -281,32 +263,29 @@ async def handle_connection(talkdesk_ws):
 
         logger.info(f"Verbindungen stehen für {remote_addr_log}. Starte Audio-Streaming-Tasks...")
 
-        # Starte die nebenläufigen Audio-Streaming-Tasks
         task_td_to_el = asyncio.create_task(
             stream_talkdesk_to_elevenlabs(talkdesk_ws, elevenlabs_ws, remote_addr_log),
-            name=f"TD_to_EL_{remote_addr_log}" # Optional: Name für besseres Debugging
+            name=f"TD_to_EL_{remote_addr_log}"
         )
         task_el_to_td = asyncio.create_task(
             stream_elevenlabs_to_talkdesk(talkdesk_ws, elevenlabs_ws, stream_sid, remote_addr_log),
-            name=f"EL_to_TD_{remote_addr_log}" # Optional: Name für besseres Debugging
+            name=f"EL_to_TD_{remote_addr_log}"
         )
         audio_tasks = [task_td_to_el, task_el_to_td]
 
-        # Warte, bis eine der Tasks endet (oder Hauptverbindung schließt)
         logger.info(f"[{remote_addr_log}] Audio-Tasks gestartet. Warte auf Beendigung einer Task oder Verbindungsschluss.")
         done, pending = await asyncio.wait(audio_tasks, return_when=asyncio.FIRST_COMPLETED)
 
         logger.info(f"[{remote_addr_log}] Mindestens eine Audio-Task beendet. Done: {len(done)}, Pending: {len(pending)}")
         for task in done:
             try:
-                 result = task.result() # Holt das Ergebnis oder wirft die Exception der Task erneut
+                 result = task.result()
                  logger.info(f"[{remote_addr_log}] Abgeschlossene Task {task.get_name()} Ergebnis: {result}")
             except asyncio.CancelledError:
                  logger.info(f"[{remote_addr_log}] Abgeschlossene Task {task.get_name()} wurde gecancelt.")
             except Exception as task_exc:
                  logger.error(f"[{remote_addr_log}] Abgeschlossene Task {task.get_name()} endete mit Fehler: {task_exc}", exc_info=True)
 
-        # Beende die verbleibenden Tasks, falls eine Task normal oder mit Fehler endete
         for task in pending:
             if not task.done():
                 logger.info(f"[{remote_addr_log}] Cancelling pending audio task: {task.get_name()}")
@@ -321,20 +300,17 @@ async def handle_connection(talkdesk_ws):
     finally:
         logger.info(f"Beende Handler für {remote_addr_log}. Räume auf...")
 
-        # Sicherstellen, dass Audio-Tasks beendet werden
         logger.info(f"[{remote_addr_log}] Sicherstellen, dass Audio-Tasks beendet werden im finally Block...")
-        if audio_tasks: # Nur wenn die Liste nicht leer ist
+        if audio_tasks:
             for task in audio_tasks:
                 if task and not task.done():
                     logger.info(f"[{remote_addr_log}] Cancelling audio task im finally: {task.get_name()}")
                     task.cancel()
-            # Warte darauf, dass alle Tasks (auch die gecancelten) abgeschlossen sind
             results = await asyncio.gather(*audio_tasks, return_exceptions=True)
             logger.info(f"[{remote_addr_log}] Audio streaming task results after final cleanup gather: {results}")
         else:
              logger.info(f"[{remote_addr_log}] Keine Audio-Tasks zum finalen Aufräumen vorhanden.")
 
-        # Aufräumen der ElevenLabs-Verbindung (Code von v3.14)
         if elevenlabs_ws:
             try:
                 current_state = elevenlabs_ws.state
@@ -387,7 +363,6 @@ async def handle_connection(talkdesk_ws):
         else:
             logger.info(f"Keine (initialisierte) Elevenlabs WebSocket Verbindung zum Schließen für {remote_addr_log} vorhanden.")
 
-        # Aufräumen der TalkDesk-Verbindung (Code von v3.14)
         if talkdesk_ws:
             try:
                 if talkdesk_ws.state == State.OPEN:
