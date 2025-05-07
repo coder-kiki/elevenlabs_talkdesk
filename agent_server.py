@@ -9,7 +9,7 @@ import sys
 from websockets.connection import ConnectionState # <--- Korrekter Import für v15.0.1
 
 # SCRIPT VERSION FÜR LOGGING
-SCRIPT_VERSION = "3.6 - Final Cleanup & First Message Test"
+SCRIPT_VERSION = "3.6.1 - Final Cleanup & First Message Test (v15.0.1 confirmed)"
 
 # --- Logging Setup ---
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
 try:
-    logger.info(f"WEBSOCKETS LIBRARY VERSION (erneut geprüft): {websockets.__version__}")
+    logger.info(f"WEBSOCKETS LIBRARY VERSION (bestätigt): {websockets.__version__}")
 except Exception as e:
     logger.error(f"Konnte websockets.__version__ nicht abrufen: {e}")
 
@@ -63,7 +63,7 @@ async def handle_connection(talkdesk_ws):
     remote_addr = talkdesk_ws.remote_address
     logger.info(f"+++ Neue Verbindung (möglicherweise TalkDesk): {remote_addr}")
     elevenlabs_ws = None
-    stream_sid = None # Wichtig für spätere Antworten
+    stream_sid = None
     try:
         start_data = None
         start_message_str_for_logging = None
@@ -130,7 +130,7 @@ async def handle_connection(talkdesk_ws):
         account_sid_from_start = start_info.get("accountSid")
         media_format = start_info.get("mediaFormat", {})
         custom_params = start_info.get("customParameters", {})
-        account_sid_top = start_data.get("account_sid", "UnknownAccount") # Aus Top-Level
+        account_sid_top = start_data.get("account_sid", "UnknownAccount") 
 
         if not stream_sid:
             logger.error(f"Kein 'streamSid' im 'start'-Objekt von {remote_addr}: {start_info}")
@@ -152,7 +152,7 @@ async def handle_connection(talkdesk_ws):
             "conversation_config_override": {"agent": {"prompt": {"prompt": POC_PROMPT}}}
         }
         # 'first_message' wieder senden, da Overrides in ElevenLabs UI jetzt erlaubt sind
-        if POC_FIRST_MESSAGE:
+        if POC_FIRST_MESSAGE: 
            initial_config["conversation_config_override"]["agent"]["first_message"] = POC_FIRST_MESSAGE
         
         await elevenlabs_ws.send(json.dumps(initial_config))
@@ -163,14 +163,14 @@ async def handle_connection(talkdesk_ws):
         
         logger.info(f"PoC für {remote_addr}: Verbindung zu TalkDesk & ElevenLabs steht. Warte...")
 
-        async for message in talkdesk_ws:
+        async for message in talkdesk_ws: 
             try:
                 if isinstance(message, str):
                     msg_data = json.loads(message)
                     evt = msg_data.get("event")
                     if evt == "stop":
                         logger.info(f"'stop'-Event von TalkDesk {remote_addr} empfangen: {message[:200]}")
-                        break
+                        break 
                     logger.debug(f"Ignoriere Text-Event '{evt}' von TalkDesk {remote_addr}")
                 else:
                     logger.debug(f"Ignoriere Binär-Nachricht von TalkDesk {remote_addr}")
@@ -182,7 +182,7 @@ async def handle_connection(talkdesk_ws):
     finally:
         logger.info(f"Beende Handler für {remote_addr}. Räume auf...")
         if elevenlabs_ws:
-            # Korrekte Prüfung mit ConnectionState für websockets >= 10.x (Version 15.0.1 wurde geloggt)
+            # Korrekte Prüfung mit ConnectionState für websockets v15.0.1
             if elevenlabs_ws.state == ConnectionState.OPEN:
                 logger.info(f"Schließe Elevenlabs WebSocket Verbindung für {remote_addr} (State: OPEN)...")
                 try:
@@ -216,7 +216,7 @@ async def main():
         async with websockets.serve(handle_connection, WEBSOCKET_HOST, WEBSOCKET_PORT):
             await asyncio.Future()
     except OSError as e:
-         if e.errno == 98:
+         if e.errno == 98: # errno 98: Address already in use
               logger.error(f"Port {WEBSOCKET_PORT} wird bereits verwendet!")
          else:
               logger.error(f"Server konnte nicht gestartet werden (OS Error {e.errno}): {e}", exc_info=True)
