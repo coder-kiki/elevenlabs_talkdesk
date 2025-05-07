@@ -6,10 +6,10 @@ import json
 import base64
 import httpx  # Für HTTP-Anfragen (Signed URL)
 import sys   # Für sys.exit beim Fehler
-from websockets.connection import ConnectionState # Für den Zustandsvergleich
+from websockets.enums import ConnectionState # <--- KORRIGIERTER IMPORT
 
 # SCRIPT VERSION FÜR LOGGING
-SCRIPT_VERSION = "3.1 - Final Finally Fix"
+SCRIPT_VERSION = "3.2 - ConnectionState Import Fix"
 
 # --- Konfiguration ---
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
@@ -22,7 +22,7 @@ WEBSOCKET_PORT = 8080
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}") # Eindeutige Log-Nachricht
+logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
 
 if not ELEVENLABS_API_KEY:
     logger.error("Umgebungsvariable ELEVENLABS_API_KEY nicht gesetzt!")
@@ -153,16 +153,11 @@ async def handle_connection(talkdesk_ws):
             "type": "conversation_initiation_client_data",
             "conversation_config_override": {"agent": {"prompt": {"prompt": POC_PROMPT}}}
         }
-        # if POC_FIRST_MESSAGE: # Testweise wieder aktiviert, da Overrides im UI erlaubt
-        #     initial_config["conversation_config_override"]["agent"]["first_message"] = POC_FIRST_MESSAGE
-        #     logger.info(f"Sende Initiale Konfiguration (inkl. First Message) an Elevenlabs für {remote_addr}")
-        # else:
-        #     logger.info(f"Sende Initiale Konfiguration (OHNE First Message) an Elevenlabs für {remote_addr}")
+        # if POC_FIRST_MESSAGE: # Erst wieder aktivieren, wenn der Rest stabil läuft
+        #    initial_config["conversation_config_override"]["agent"]["first_message"] = POC_FIRST_MESSAGE
 
-        # Für diesen Test vorerst OHNE first_message, um Policy-Fehler sicher auszuschließen
-        logger.info(f"Sende Initiale Konfiguration (OHNE First Message) an Elevenlabs für {remote_addr}")
         await elevenlabs_ws.send(json.dumps(initial_config))
-        logger.info(f"Initiale Konfiguration (Prompt='{POC_PROMPT}') an Elevenlabs für {remote_addr} gesendet.")
+        logger.info(f"Initiale Konfiguration an Elevenlabs für {remote_addr} gesendet: Prompt='{POC_PROMPT}' (First Message NICHT gesendet!)")
 
         logger.info(f"PoC für {remote_addr}: Verbindung zu TalkDesk & ElevenLabs steht. Warte...")
 
@@ -200,8 +195,7 @@ async def handle_connection(talkdesk_ws):
     finally:
         logger.info(f"Beende Handler für {remote_addr}. Räume auf...")
         if elevenlabs_ws:
-            # KORREKTE PRÜFUNG mit ConnectionState
-            if elevenlabs_ws.state == ConnectionState.OPEN:
+            if elevenlabs_ws.state == ConnectionState.OPEN: # KORREKTE PRÜFUNG
                 logger.info(f"Schließe Elevenlabs WebSocket Verbindung für {remote_addr} (State: OPEN)...")
                 try:
                     await asyncio.wait_for(elevenlabs_ws.close(code=1000, reason='Handler finished normally'), timeout=5.0)
@@ -212,7 +206,7 @@ async def handle_connection(talkdesk_ws):
                     logger.error(f"Fehler beim Schließen der Elevenlabs WebSocket für {remote_addr}: {e}", exc_info=True)
             elif elevenlabs_ws.state == ConnectionState.CLOSED:
                  logger.info(f"Elevenlabs WebSocket für {remote_addr} war bereits geschlossen.")
-            else: # CONNECTING oder CLOSING
+            else:
                  logger.warning(f"Elevenlabs WebSocket für {remote_addr} in Zustand ({elevenlabs_ws.state}) beim Aufräumen. Versuche trotzdem zu schließen.")
                  try:
                     await asyncio.wait_for(elevenlabs_ws.close(code=1008, reason='Closing from unexpected state'), timeout=5.0)
@@ -222,7 +216,6 @@ async def handle_connection(talkdesk_ws):
         else:
              logger.info(f"Keine (initialisierte) Elevenlabs WebSocket Verbindung zum Schließen für {remote_addr} vorhanden.")
 
-# --- Hauptfunktion zum Starten des Servers ---
 async def main():
     try:
         import httpx
@@ -242,7 +235,6 @@ async def main():
     except Exception as e:
         logger.error(f"Server konnte nicht gestartet werden oder ist abgestürzt: {e}", exc_info=True)
 
-# --- Skript-Einstiegspunkt ---
 if __name__ == "__main__":
     try:
         asyncio.run(main())
