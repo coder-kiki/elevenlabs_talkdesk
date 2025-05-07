@@ -8,7 +8,7 @@ import httpx
 import sys
 
 # SCRIPT VERSION FÜR LOGGING
-SCRIPT_VERSION = "3.4 - Get Websockets Version"
+SCRIPT_VERSION = "3.5 - Get Websockets Version (Import Removed)"
 
 # --- Logging Setup ---
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -16,12 +16,11 @@ logger = logging.getLogger(__name__)
 
 logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
 
-# !!! WICHTIG: Logge die Websockets-Version !!!
+# !!! WICHTIG: Logge die Websockets-Version GANZ AM ANFANG !!!
 try:
-    logger.info(f"WEBSOCKETS LIBRARY VERSION: {websockets.__version__}")
+    logger.info(f"========= WEBSOCKETS LIBRARY VERSION: {websockets.__version__} =========")
 except Exception as e:
     logger.error(f"Konnte websockets.__version__ nicht abrufen: {e}")
-
 
 # --- Konfiguration ---
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
@@ -129,15 +128,16 @@ async def handle_connection(talkdesk_ws):
 
         stream_sid = start_info.get("streamSid")
         call_sid = start_info.get("callSid", f"UnknownCall_{remote_addr}")
-        account_sid_from_start = start_info.get("accountSid")
+        # account_sid_from_start = start_info.get("accountSid") 
         media_format = start_info.get("mediaFormat", {})
         custom_params = start_info.get("customParameters", {})
-
+        account_sid_top = start_data.get("account_sid", "UnknownAccount") 
+        
         if not stream_sid:
             logger.error(f"Kein 'streamSid' im 'start'-Objekt von {remote_addr}: {start_info}")
             return
 
-        logger.info(f"Anruf gestartet: CallSid='{call_sid}', StreamSid='{stream_sid}'")
+        logger.info(f"Anruf gestartet: CallSid='{call_sid}', StreamSid='{stream_sid}', AccountSid(Top)='{account_sid_top}'")
         logger.info(f"Media Format von {remote_addr}: {media_format}")
         logger.info(f"Custom Parameters von {remote_addr}: {custom_params}")
 
@@ -152,18 +152,15 @@ async def handle_connection(talkdesk_ws):
             "type": "conversation_initiation_client_data",
             "conversation_config_override": {"agent": {"prompt": {"prompt": POC_PROMPT}}}
         }
-        # if POC_FIRST_MESSAGE: # Vorerst auskommentiert
+        # if POC_FIRST_MESSAGE: 
         #    initial_config["conversation_config_override"]["agent"]["first_message"] = POC_FIRST_MESSAGE
-
+        
         await elevenlabs_ws.send(json.dumps(initial_config))
         logger.info(f"Initiale Konfiguration an Elevenlabs für {remote_addr} gesendet: Prompt='{POC_PROMPT}' (First Message NICHT gesendet!)")
-
+        
         logger.info(f"PoC für {remote_addr}: Verbindung zu TalkDesk & ElevenLabs steht. Warte...")
 
-        async for message in talkdesk_ws: # Loop um Nachrichten von TalkDesk zu empfangen
-            # Hier würde die Logik zum Weiterleiten von TalkDesk-Audio an ElevenLabs stehen
-            # und zum Empfangen von Audio von ElevenLabs und Weiterleiten an TalkDesk
-            # Für den PoC ignorieren wir die meisten Nachrichten und warten auf "stop"
+        async for message in talkdesk_ws: 
             try:
                 if isinstance(message, str):
                     msg_data = json.loads(message)
@@ -171,21 +168,17 @@ async def handle_connection(talkdesk_ws):
                     if evt == "stop":
                         logger.info(f"'stop'-Event von TalkDesk {remote_addr} empfangen: {message[:200]}")
                         break 
-                    elif evt == "media":
-                         logger.debug(f"Ignoriere 'media' event von TalkDesk für {remote_addr}")
-                    else:
-                         logger.debug(f"Ignoriere anderes Text-Event von TalkDesk {evt} für {remote_addr}")
-            except Exception:
-                logger.debug(f"Konnte Nachricht von TalkDesk nicht als JSON parsen oder verarbeiten: {message[:100]}")
+                    logger.debug(f"Ignoriere Text-Event '{evt}' von TalkDesk {remote_addr}")
+                else:
+                    logger.debug(f"Ignoriere Binär-Nachricht von TalkDesk {remote_addr}")
+            except Exception as e:
+                logger.warning(f"Fehler bei Verarbeitung weiterer Nachricht von TalkDesk: {e}")
             pass
-
-
-    except Exception as e: # Breiteres Exception-Handling für die Hauptlogik
+    except Exception as e:
         logger.error(f"Unerwarteter Fehler im Haupt-Handler für {remote_addr}: {e}", exc_info=True)
     finally:
         logger.info(f"Beende Handler für {remote_addr}. Räume auf...")
         if elevenlabs_ws:
-            # Vereinfachtes Schließen für diesen Test, um Import-Probleme zu umgehen
             logger.info(f"Versuche Elevenlabs WebSocket für {remote_addr} zu schließen (vereinfacht)...")
             try:
                 await asyncio.wait_for(elevenlabs_ws.close(code=1000, reason='Handler finished'), timeout=2.0)
@@ -194,7 +187,6 @@ async def handle_connection(talkdesk_ws):
                 logger.error(f"Fehler beim vereinfachten Schließen des Elevenlabs WS: {e}", exc_info=True)
         else:
             logger.info(f"Keine Elevenlabs WS-Verbindung zum Schließen vorhanden für {remote_addr}.")
-
 
 async def main():
     try:
