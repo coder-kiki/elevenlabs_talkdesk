@@ -17,8 +17,8 @@ logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
 # -- Neue ENV-Variablen (bisher teils fest im Code) --
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
 ELEVENLABS_AGENT_ID = os.environ.get("ELEVENLABS_AGENT_ID")
-POC_PROMPT = os.environ.get("ELEVENLABS_POC_PROMPT", "You are a helpful AI assistant.")
-POC_FIRST_MESSAGE = os.environ.get("ELEVENLABS_POC_FIRST_MESSAGE", "")
+POC_PROMPT = os.environ.get("ELEVENLABS_POC_PROMPT")
+POC_FIRST_MESSAGE = os.environ.get("ELEVENLABS_POC_FIRST_MESSAGE")
 WEBSOCKET_HOST = os.environ.get("WEBSOCKET_HOST", "0.0.0.0")
 WEBSOCKET_PORT = int(os.environ.get("WEBSOCKET_PORT", "8080"))
 
