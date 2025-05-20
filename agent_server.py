@@ -43,11 +43,21 @@ async def get_elevenlabs_signed_url():
         logger.error(f"Signed URL Fehler: {e}")
         return None
 
+# == INITIALKONFIGURATION FÜR ELEVENLABS (optional) ==
+def build_initial_config():
+    config = {
+        "type": "conversation_initiation_client_data"
+    }
+    if POC_PROMPT:
+        config["conversation_config_override"] = {"agent": {"prompt": {"prompt": POC_PROMPT}}}
+    if POC_FIRST_MESSAGE:
+        config.setdefault("conversation_config_override", {}).setdefault("agent", {})["first_message"] = POC_FIRST_MESSAGE
+    return config
+
 # == AUDIO ROUTING FUNKTIONEN (aus deinem Code übernommen) ==
 # stream_talkdesk_to_elevenlabs(...)
 # stream_elevenlabs_to_talkdesk(...)
-# handle_connection(...)
-# (Alle diese Funktionen bleiben unverändert – werden aus deinem Code übernommen)
+# handle_connection(...)  <-- Hier muss innerhalb dieser Funktion build_initial_config() verwendet werden
 
 # == SERVER START ==
 async def main():
