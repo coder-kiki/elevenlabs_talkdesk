@@ -1,3 +1,5 @@
 websockets==15.0.1
 elevenlabs
 httpx
+SpeechRecognition>=3.8.0
+PyAudio>=0.2.11
