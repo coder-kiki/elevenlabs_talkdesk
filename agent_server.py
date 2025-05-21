@@ -12,10 +12,117 @@ import re
 import base64
 import struct
 import math
+import io
+import wave
 from websockets.connection import State
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, ConnectionClosedError
 
-SCRIPT_VERSION = "5.4 - Optimized Barge-in with Low-Energy Detection"
+# Optional imports for speech recognition
+try:
+    import speech_recognition as sr
+    SPEECH_RECOGNITION_AVAILABLE = True
+    logger.info("Speech Recognition Modul verfügbar. Textbasierte Unterbrechungserkennung aktiviert.")
+except ImportError:
+    SPEECH_RECOGNITION_AVAILABLE = False
+    logger.warning("speech_recognition Modul nicht verfügbar. Textbasierte Unterbrechungserkennung deaktiviert.")
+
+# SPEECH RECOGNIZER
+class SpeechRecognizer:
+    def __init__(self):
+        self.recognizer = sr.Recognizer() if SPEECH_RECOGNITION_AVAILABLE else None
+        self.audio_buffer = bytearray()
+        self.last_recognition_time = 0
+        self.recognition_interval = 1.0  # Sekunden zwischen Erkennungsversuchen
+        self.min_buffer_size = 8000  # Mindestgröße für Erkennungsversuch (ca. 1 Sekunde Audio)
+        self.max_buffer_size = 32000  # Maximale Puffergröße (ca. 4 Sekunden Audio)
+        self.is_processing = False
+        self.language = "de-DE"  # Deutsch als Standardsprache
+        
+    def add_audio(self, audio_base64):
+        """Fügt Audio zum Puffer hinzu."""
+        if not SPEECH_RECOGNITION_AVAILABLE or not USE_SPEECH_RECOGNITION:
+            return
+            
+        try:
+            # Base64 dekodieren und zum Puffer hinzufügen
+            audio_bytes = base64.b64decode(audio_base64)
+            self.audio_buffer.extend(audio_bytes)
+            
+            # Puffer auf maximale Größe begrenzen (FIFO)
+            if len(self.audio_buffer) > self.max_buffer_size:
+                excess = len(self.audio_buffer) - self.max_buffer_size
+                self.audio_buffer = self.audio_buffer[excess:]
+        except Exception as e:
+            logger.error(f"Fehler beim Hinzufügen von Audio zum Puffer: {e}")
+    
+    async def try_recognize(self, current_time):
+        """Versucht, Sprache im Puffer zu erkennen, wenn genug Zeit vergangen ist."""
+        if not SPEECH_RECOGNITION_AVAILABLE or not USE_SPEECH_RECOGNITION:
+            return None
+            
+        if self.is_processing:
+            return None
+            
+        # Prüfe, ob genug Zeit vergangen ist und der Puffer groß genug ist
+        if (current_time - self.last_recognition_time >= self.recognition_interval and 
+                len(self.audio_buffer) >= self.min_buffer_size):
+            
+            self.is_processing = True
+            self.last_recognition_time = current_time
+            
+            # Kopiere den aktuellen Puffer für die Verarbeitung
+            current_buffer = bytes(self.audio_buffer)
+            # Leere den Puffer für neue Daten
+            self.audio_buffer.clear()
+            
+            try:
+                # Führe die Spracherkennung in einem separaten Thread aus
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, self._recognize_audio, current_buffer)
+                
+                if result:
+                    logger.info(f"Spracherkennung erfolgreich: '{result}'")
+                    return result
+            except Exception as e:
+                logger.error(f"Fehler bei der Spracherkennung: {e}")
+            finally:
+                self.is_processing = False
+                
+        return None
+    
+    def _recognize_audio(self, audio_bytes):
+        """Führt die eigentliche Spracherkennung durch."""
+        if not self.recognizer:
+            return None
+            
+        try:
+            # Konvertiere μ-law 8kHz zu WAV für die Spracherkennung
+            with io.BytesIO() as wav_io:
+                with wave.open(wav_io, 'wb') as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(1)  # 8-bit
+                    wav_file.setframerate(8000)
+                    wav_file.writeframes(audio_bytes)
+                
+                wav_io.seek(0)
+                with sr.AudioFile(wav_io) as source:
+                    audio_data = self.recognizer.record(source)
+                    
+                    # Versuche die Spracherkennung
+                    try:
+                        # Verwende Google's Spracherkennung (erfordert Internetverbindung)
+                        text = self.recognizer.recognize_google(audio_data, language=self.language)
+                        return text
+                    except sr.UnknownValueError:
+                        logger.debug("Spracherkennung konnte Audio nicht verstehen")
+                    except sr.RequestError as e:
+                        logger.error(f"Fehler bei der Google Spracherkennung: {e}")
+        except Exception as e:
+            logger.error(f"Fehler bei der Audio-Konvertierung: {e}")
+            
+        return None
+
+SCRIPT_VERSION = "5.5 - Intelligent Barge-in with Speech Classification"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
@@ -32,6 +139,13 @@ VAD_SPEECH_DURATION_THRESHOLD = float(os.environ.get("VAD_SPEECH_DURATION_THRESH
 VAD_SILENCE_DURATION_THRESHOLD = float(os.environ.get("VAD_SILENCE_DURATION_THRESHOLD", "0.5"))
 LOG_INTERVAL = int(os.environ.get("LOG_INTERVAL", "300"))  # 5 Minuten
 DEBUG_LOGGING = os.environ.get("DEBUG_LOGGING", "true").lower() == "true"  # Detaillierte Logs aktivieren
+USE_SPEECH_RECOGNITION = os.environ.get("USE_SPEECH_RECOGNITION", "true").lower() == "true"  # Spracherkennung für bessere Unterbrechungserkennung
+
+# Liste von Bestätigungswörtern, die nicht als Unterbrechung behandelt werden sollen
+ACKNOWLEDGMENT_WORDS = [
+    "genau", "ok", "okay", "alles klar", "verstanden", "ja", "jep", "jup", "mhm", "aha", 
+    "gut", "super", "prima", "verstehe", "klar", "richtig", "stimmt", "natürlich", "sicher"
+]
 
 if not ELEVENLABS_API_KEY or not ELEVENLABS_AGENT_ID:
     logger.error("API Key oder Agent ID fehlt! Abbruch.")
@@ -56,6 +170,53 @@ def mulaw_decode(sample):
     # Umwandlung in linearen Wert
     result = sign * (((1 + sample) * 2) ** (1/256) - 1)
     return result
+
+# SPEECH CONTENT ANALYZER
+class SpeechContentAnalyzer:
+    def __init__(self):
+        self.acknowledgment_words = ACKNOWLEDGMENT_WORDS
+        
+    def is_acknowledgment(self, text):
+        """
+        Prüft, ob der Text nur eine Bestätigung ist und keine Frage oder Anweisung.
+        """
+        # Normalisiere den Text (Kleinbuchstaben, entferne Satzzeichen)
+        normalized_text = text.lower().strip()
+        for punct in ['.', ',', '!', '?', ';', ':', '-']:
+            normalized_text = normalized_text.replace(punct, '')
+        
+        # Prüfe, ob der Text nur aus Bestätigungswörtern besteht
+        words = normalized_text.split()
+        if not words:
+            return False
+            
+        # Wenn alle Wörter Bestätigungen sind
+        for word in words:
+            if word not in self.acknowledgment_words:
+                return False
+                
+        return True
+        
+    def contains_question(self, text):
+        """
+        Prüft, ob der Text eine Frage enthält.
+        """
+        # Einfache Heuristik: Endet mit Fragezeichen oder enthält Fragewörter
+        question_words = ["wie", "was", "warum", "weshalb", "wo", "wann", "wer", "welche", "welcher", "welches", "können", "kannst", "würdest", "könntest"]
+        
+        # Normalisiere den Text
+        normalized_text = text.lower()
+        
+        # Prüfe auf Fragezeichen
+        if "?" in normalized_text:
+            return True
+            
+        # Prüfe auf Fragewörter am Anfang
+        words = normalized_text.split()
+        if words and words[0] in question_words:
+            return True
+            
+        return False
 
 # METRIKEN-SAMMLUNG
 class MetricsCollector:
@@ -239,6 +400,8 @@ class InterruptionClassifier:
         self.backchanneling_energy_ratio = 0.8  # Im Vergleich zur durchschnittlichen Sprachenergie (höher für aggressivere Erkennung)
         self.average_speech_energy = 0.1  # Startwert, wird dynamisch angepasst
         self.speech_energy_samples = []
+        self.speech_content_analyzer = SpeechContentAnalyzer()
+        self.last_speech_text = ""
         
     def update_average_speech_energy(self, energy):
         self.speech_energy_samples.append(energy)
@@ -247,6 +410,12 @@ class InterruptionClassifier:
         
         if self.speech_energy_samples:
             self.average_speech_energy = sum(self.speech_energy_samples) / len(self.speech_energy_samples)
+    
+    def set_last_speech_text(self, text):
+        """Speichert den letzten erkannten Sprachtext für die Klassifikation."""
+        if text and isinstance(text, str):
+            self.last_speech_text = text
+            logger.info(f"Sprachtext erkannt: '{text}'")
         
     def classify_interruption(self, duration, energy, agent_speaking_duration, agent_in_pause):
         try:
@@ -257,10 +426,25 @@ class InterruptionClassifier:
             if DEBUG_LOGGING:
                 logger.info(f"Interruption-Klassifikation: Dauer={duration:.2f}s, Energie={energy:.6f}, Agent-Sprechdauer={agent_speaking_duration:.2f}s")
             
-            # IMMER als Unterbrechung klassifizieren, wenn der Agent spricht
-            # Keine komplexe Klassifizierung mehr - jede erkannte Benutzersprache ist eine Unterbrechung
-            if agent_speaking_duration > 0.1:  # Sofort reagieren, wenn der Agent spricht
-                logger.info(f"Unterbrechung erkannt: Dauer={duration:.2f}s, Energie={energy:.6f}")
+            # Wenn der Agent spricht, prüfe ob es sich um eine Bestätigung handelt
+            if agent_speaking_duration > 0.1 and self.last_speech_text:
+                # Wenn es eine einfache Bestätigung ist, nicht als Unterbrechung behandeln
+                if self.speech_content_analyzer.is_acknowledgment(self.last_speech_text):
+                    logger.info(f"Bestätigung erkannt, keine Unterbrechung: '{self.last_speech_text}'")
+                    return "BACKCHANNELING"
+                
+                # Wenn es eine Frage ist, definitiv als Unterbrechung behandeln
+                if self.speech_content_analyzer.contains_question(self.last_speech_text):
+                    logger.info(f"Frage erkannt, als Unterbrechung behandelt: '{self.last_speech_text}'")
+                    return "INTERRUPTION"
+                    
+                # Standardfall: Als Unterbrechung behandeln
+                logger.info(f"Unterbrechung erkannt: Dauer={duration:.2f}s, Energie={energy:.6f}, Text='{self.last_speech_text}'")
+                return "INTERRUPTION"
+            
+            # Wenn der Agent nicht spricht oder keine Spracherkennung vorliegt
+            if agent_speaking_duration > 0.1:  # Agent spricht, aber kein Text erkannt
+                logger.info(f"Unterbrechung erkannt (ohne Textanalyse): Dauer={duration:.2f}s, Energie={energy:.6f}")
                 return "INTERRUPTION"
             
             # Nur wenn der Agent nicht spricht, als Backchanneling klassifizieren
@@ -470,6 +654,7 @@ async def get_elevenlabs_signed_url():
 async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
     vad = SimpleVAD()
     interruption_classifier = InterruptionClassifier()
+    speech_recognizer = SpeechRecognizer()
     speech_start_time = None
     last_status_check = time.time()
     status_check_interval = 0.5  # Alle 0.5 Sekunden den Sprechstatus prüfen
@@ -478,6 +663,10 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
     energy_samples = []
     last_energy_stats_time = time.time()
     energy_stats_interval = 10.0  # Alle 10 Sekunden Energiestatistiken loggen
+    
+    # Spracherkennung
+    last_recognition_attempt = time.time()
+    recognition_attempt_interval = 0.5  # Alle 0.5 Sekunden versuchen, Sprache zu erkennen
     
     try:
         while True:
@@ -560,8 +749,49 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                     
                                     logger.info(f"Potenzielle Unterbrechung: Benutzer spricht seit {speech_duration:.2f}s, Agent spricht seit {context_manager.agent_speaking_duration:.2f}s")
                                     
-                                    # Sofort unterbrechen, ohne komplexe Klassifizierung
-                                    await context_manager.handle_interruption(el_ws)
+                                    # Klassifiziere die Unterbrechung basierend auf Dauer und Energie
+                                    interruption_type = interruption_classifier.classify_interruption(
+                                        duration=speech_duration,
+                                        energy=energy,
+                                        agent_speaking_duration=context_manager.agent_speaking_duration,
+                                        agent_in_pause=context_manager.agent_in_pause
+                                    )
+                                    
+                                    if interruption_type == "INTERRUPTION":
+                                        await context_manager.handle_interruption(el_ws)
+                                    elif interruption_type == "BACKCHANNELING":
+                                        await context_manager.handle_backchanneling(el_ws)
+                            
+                            # Füge Audio zum Spracherkennungspuffer hinzu
+                            speech_recognizer.add_audio(payload)
+                            
+                            # Versuche regelmäßig, Sprache zu erkennen
+                            if current_time - last_recognition_attempt >= recognition_attempt_interval:
+                                last_recognition_attempt = current_time
+                                recognized_text = await speech_recognizer.try_recognize(current_time)
+                                if recognized_text:
+                                    # Aktualisiere den Interruption Classifier mit dem erkannten Text
+                                    interruption_classifier.set_last_speech_text(recognized_text)
+                                    
+                                    # Wenn der Agent spricht, prüfe sofort, ob es eine Unterbrechung ist
+                                    if context_manager.is_agent_speaking and speech_start_time is not None:
+                                        speech_duration = current_time - speech_start_time
+                                        energy = vad.calculate_energy(payload)
+                                        
+                                        # Klassifiziere die Unterbrechung basierend auf dem erkannten Text
+                                        interruption_type = interruption_classifier.classify_interruption(
+                                            duration=speech_duration,
+                                            energy=energy,
+                                            agent_speaking_duration=context_manager.agent_speaking_duration,
+                                            agent_in_pause=context_manager.agent_in_pause
+                                        )
+                                        
+                                        if interruption_type == "INTERRUPTION":
+                                            logger.info(f"Textbasierte Unterbrechung erkannt: '{recognized_text}'")
+                                            await context_manager.handle_interruption(el_ws)
+                                        elif interruption_type == "BACKCHANNELING":
+                                            logger.info(f"Textbasiertes Backchanneling erkannt: '{recognized_text}'")
+                                            await context_manager.handle_backchanneling(el_ws)
                             
                             # Audio an ElevenLabs senden
                             await el_ws.send(json.dumps({"user_audio_chunk": payload}))
