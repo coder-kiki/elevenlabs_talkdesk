@@ -956,7 +956,7 @@ async def handle_connection(websocket):
         ssl_context.verify_mode = ssl.CERT_REQUIRED
         
         # Verbesserte WebSocket-Verbindung mit angepassten Headers
-        extra_headers = {
+        additional_headers = {
             "Connection": "Upgrade",
             "Upgrade": "websocket",
             "Sec-WebSocket-Version": "13"
@@ -965,7 +965,7 @@ async def handle_connection(websocket):
         el_ws = await websockets.connect(
             signed_url, 
             ssl=ssl_context if signed_url.startswith("wss://") else None,
-            extra_headers=extra_headers,
+            additional_headers=additional_headers,  # Korrekte Parameter-Bezeichnung für websockets 15.0.1
             ping_interval=20,  # Regelmäßige Ping-Nachrichten senden
             ping_timeout=60    # Längerer Timeout für Ping-Antworten
         )
