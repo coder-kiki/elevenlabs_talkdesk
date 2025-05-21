@@ -4,6 +4,14 @@ FROM python:3.12-slim
 # Setze das Arbeitsverzeichnis im Container
 WORKDIR /app
 
+# Install system dependencies for PyAudio
+RUN apt-get update && apt-get install -y \
+    portaudio19-dev \
+    python3-pyaudio \
+    gcc \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # Kopiere zuerst nur die requirements-Datei und installiere die Pakete
 # (Nutzt Docker-Caching, sodass Pakete nicht bei jeder Code-Änderung neu installiert werden)
 COPY requirements.txt requirements.txt
