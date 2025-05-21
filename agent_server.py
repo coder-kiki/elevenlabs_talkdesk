@@ -17,15 +17,6 @@ import wave
 from websockets.connection import State
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, ConnectionClosedError
 
-# Optional imports for speech recognition
-try:
-    import speech_recognition as sr
-    SPEECH_RECOGNITION_AVAILABLE = True
-    logger.info("Speech Recognition Modul verfügbar. Textbasierte Unterbrechungserkennung aktiviert.")
-except ImportError:
-    SPEECH_RECOGNITION_AVAILABLE = False
-    logger.warning("speech_recognition Modul nicht verfügbar. Textbasierte Unterbrechungserkennung deaktiviert.")
-
 # SPEECH RECOGNIZER
 class SpeechRecognizer:
     def __init__(self):
@@ -127,6 +118,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
 
+# Optional imports for speech recognition
+try:
+    import speech_recognition as sr
+    SPEECH_RECOGNITION_AVAILABLE = True
+    logger.info("Speech Recognition Modul verfügbar. Textbasierte Unterbrechungserkennung aktiviert.")
+except ImportError:
+    SPEECH_RECOGNITION_AVAILABLE = False
+    logger.warning("speech_recognition Modul nicht verfügbar. Textbasierte Unterbrechungserkennung deaktiviert.")
+
 # ENV-VARIABLEN
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
 ELEVENLABS_AGENT_ID = os.environ.get("ELEVENLABS_AGENT_ID")
@@ -185,8 +185,11 @@ class SpeechContentAnalyzer:
         for punct in ['.', ',', '!', '?', ';', ':', '-']:
             normalized_text = normalized_text.replace(punct, '')
         
-        # Prüfe, ob der Text nur aus Bestätigungswörtern besteht
+        # Prüfe, ob der Text nur aus einem Wort besteht
         words = normalized_text.split()
+        if len(words) == 1:
+            return True  # Ein-Wort-Antworten als Zustimmung kategorisieren
+        
         if not words:
             return False
             
