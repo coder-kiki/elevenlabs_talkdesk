@@ -23,11 +23,19 @@ class SpeechRecognizer:
         self.recognizer = sr.Recognizer() if SPEECH_RECOGNITION_AVAILABLE else None
         self.audio_buffer = bytearray()
         self.last_recognition_time = 0
-        self.recognition_interval = 1.0  # Sekunden zwischen Erkennungsversuchen
-        self.min_buffer_size = 8000  # Mindestgröße für Erkennungsversuch (ca. 1 Sekunde Audio)
+        self.recognition_interval = 0.5  # Reduziert von 1.0s für schnellere Erkennung
+        self.min_buffer_size = 6000  # Reduziert von 8000 für schnellere Erkennung (ca. 0.75 Sekunden Audio)
         self.max_buffer_size = 32000  # Maximale Puffergröße (ca. 4 Sekunden Audio)
         self.is_processing = False
         self.language = "de-DE"  # Deutsch als Standardsprache
+        
+        # Optimierung der Spracherkennung für schnellere Reaktion
+        if self.recognizer:
+            # Erhöhe die Empfindlichkeit der Spracherkennung
+            self.recognizer.energy_threshold = 300  # Standardwert ist 300
+            self.recognizer.dynamic_energy_threshold = True
+            self.recognizer.dynamic_energy_adjustment_damping = 0.15
+            self.recognizer.dynamic_energy_ratio = 1.5
         
     def add_audio(self, audio_base64):
         """Fügt Audio zum Puffer hinzu."""
@@ -113,7 +121,7 @@ class SpeechRecognizer:
             
         return None
 
-SCRIPT_VERSION = "5.5 - Intelligent Barge-in with Speech Classification"
+SCRIPT_VERSION = "5.6 - Enhanced Barge-in with Optimized Interruption Detection"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
@@ -289,7 +297,8 @@ class SimpleVAD:
                  speech_duration_threshold=VAD_SPEECH_DURATION_THRESHOLD, 
                  silence_duration_threshold=VAD_SILENCE_DURATION_THRESHOLD):
         self.energy_threshold = energy_threshold
-        self.speech_duration_threshold = speech_duration_threshold
+        # Reduzierte Schwellenwerte für schnellere Erkennung
+        self.speech_duration_threshold = speech_duration_threshold * 0.8  # 20% schnellere Erkennung
         self.silence_duration_threshold = silence_duration_threshold
         self.is_speaking = False
         self.speech_start_time = None
@@ -298,6 +307,11 @@ class SimpleVAD:
         self.adaptation_rate = 0.05  # Für adaptive Schwellenwertanpassung
         self.last_energy_log_time = 0
         self.energy_log_interval = 1.0  # Energielevel jede Sekunde loggen
+        
+        # Zusätzliche Parameter für verbesserte Barge-in-Erkennung
+        self.agent_speaking_sensitivity_factor = 0.9  # Erhöhte Empfindlichkeit während Agent spricht
+        self.energy_history = []  # Speichert Energiewerte für Trend-Analyse
+        self.energy_history_max_size = 10  # Anzahl der zu speichernden Energiewerte
         
     def update_background_energy(self, current_energy):
         if self.background_energy is None:
@@ -339,8 +353,13 @@ class SimpleVAD:
             logger.warning(f"Fehler bei Energieberechnung: {e}")
             return 0.0005  # Fallback-Wert basierend auf typischen Hintergrundwerten
         
-    def is_voice_active(self, audio_base64, current_time):
+    def is_voice_active(self, audio_base64, current_time, agent_is_speaking=False):
         energy = self.calculate_energy(audio_base64)
+        
+        # Speichere Energiewerte für Trend-Analyse
+        self.energy_history.append(energy)
+        if len(self.energy_history) > self.energy_history_max_size:
+            self.energy_history.pop(0)
         
         # Debug-Logging für Energielevel (begrenzt auf Intervalle)
         if DEBUG_LOGGING and current_time - self.last_energy_log_time > self.energy_log_interval:
@@ -353,18 +372,31 @@ class SimpleVAD:
             self.update_background_energy(energy)
         
         # Dynamischer Schwellenwert basierend auf Hintergrundgeräuschen
-        # Verwende einen niedrigeren Multiplikator und einen absoluten Mindestwert
+        # Wenn Agent spricht, verwende einen niedrigeren Schwellenwert für schnellere Barge-in-Erkennung
+        threshold_multiplier = 1.1  # Standard: 10% über Hintergrund
+        if agent_is_speaking:
+            threshold_multiplier = self.agent_speaking_sensitivity_factor  # Reduzierter Schwellenwert während Agent spricht
+            
         dynamic_threshold = max(
-            self.energy_threshold,  # Absoluter Mindestwert
-            self.background_energy * 1.1 if self.background_energy else self.energy_threshold  # Nur 10% über Hintergrund
+            self.energy_threshold * (0.9 if agent_is_speaking else 1.0),  # Niedrigerer absoluter Schwellenwert wenn Agent spricht
+            self.background_energy * threshold_multiplier if self.background_energy else self.energy_threshold
         )
         
         # Relative Änderung zum Hintergrund berechnen
         relative_change = energy / self.background_energy if self.background_energy else 1.0
         
+        # Trend-Analyse: Prüfe, ob die Energie ansteigt (Indikator für beginnende Sprache)
+        energy_trend_rising = False
+        if len(self.energy_history) >= 3:
+            # Berechne durchschnittliche Änderungsrate der letzten Energiewerte
+            recent_changes = [self.energy_history[i] - self.energy_history[i-1] for i in range(1, len(self.energy_history))]
+            avg_change = sum(recent_changes) / len(recent_changes)
+            energy_trend_rising = avg_change > 0.0001  # Positive Änderungsrate deutet auf ansteigende Energie hin
+        
         # Sprache erkennen basierend auf absolutem Schwellenwert ODER relativer Änderung
+        # Wenn Agent spricht, niedrigere Schwelle für relative Änderung verwenden
         is_above_threshold = energy > dynamic_threshold
-        is_significant_change = relative_change > 1.5  # 50% Änderung zum Hintergrund
+        is_significant_change = relative_change > (1.3 if agent_is_speaking else 1.5)  # Niedrigerer Schwellenwert wenn Agent spricht
         
         if is_above_threshold or is_significant_change:
             if not self.is_speaking:
@@ -512,19 +544,15 @@ class ContextManager:
             self.agent_speaking_start_time = None
             self.agent_in_pause = False
             
-            # Sende beide Signale gleichzeitig für maximale Wirkung
             try:
-                # Sende direkte Interruption (einfacher und schneller)
+                # Optimierte Reihenfolge für schnellere Unterbrechung:
+                # 1. Sende zuerst das direkte Interruption-Signal (höchste Priorität)
                 await ws.send(json.dumps({
                     "type": "interruption"
                 }))
                 logger.info("Direktes Interruption-Signal gesendet")
                 
-                # Erstelle sofort einen neuen Kontext
-                new_context_id = await self.start_new_context(ws)
-                logger.info(f"Neuer Kontext {new_context_id} erstellt vor Abort des alten Kontexts")
-                
-                # Sende auch Kontext-Steuerung für den alten Kontext (für vollständige Kontrolle)
+                # 2. Sende sofort das Abort-Signal für den aktuellen Kontext
                 await ws.send(json.dumps({
                     "type": "context_control",
                     "context_control": {
@@ -533,6 +561,10 @@ class ContextManager:
                     }
                 }))
                 logger.info(f"Kontext-Abort-Signal für {old_context_id} gesendet")
+                
+                # 3. Erstelle einen neuen Kontext für die nächste Antwort
+                new_context_id = await self.start_new_context(ws)
+                logger.info(f"Neuer Kontext {new_context_id} erstellt nach Abort des alten Kontexts")
                 
                 metrics.increment("interruptions_detected")
             except Exception as e:
@@ -710,7 +742,12 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                             # VAD-Prüfung mit Fehlerbehandlung
                             is_voice_active = False
                             try:
-                                is_voice_active = vad.is_voice_active(payload, current_time)
+                                # Übergebe den Agent-Sprechstatus an die VAD für optimierte Barge-in-Erkennung
+                                is_voice_active = vad.is_voice_active(
+                                    payload, 
+                                    current_time, 
+                                    agent_is_speaking=context_manager.is_agent_speaking
+                                )
                             except Exception as vad_error:
                                 logger.error(f"VAD-Fehler: {vad_error}")
                                 # Trotz Fehler fortfahren
@@ -720,16 +757,21 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                 # Direkte Energieprüfung für Unterbrechungserkennung
                                 try:
                                     direct_energy = vad.calculate_energy(payload)
+                                    # Aggressivere Unterbrechungserkennung: Niedrigerer Schwellenwert für schnellere Reaktion
+                                    energy_threshold_factor = 1.2  # Reduziert von 1.3 für schnellere Erkennung
+                                    
                                     # Wenn Energie signifikant über Hintergrund, als potenzielle Unterbrechung behandeln
-                                    if direct_energy > vad.background_energy * 1.3:
+                                    if direct_energy > vad.background_energy * energy_threshold_factor:
                                         if speech_start_time is None:
                                             speech_start_time = current_time
                                             logger.info(f"Potenzielle Unterbrechung durch Energieanstieg: E={direct_energy:.6f}, BG={vad.background_energy:.6f}")
                                         
-                                        # Behandle als Unterbrechung nach kurzer Zeit
+                                        # Behandle als Unterbrechung nach sehr kurzer Zeit
                                         speech_duration = current_time - speech_start_time
-                                        if speech_duration > 0.2:  # Sehr kurze Dauer für Unterbrechungserkennung
+                                        # Reduzierte Dauer für schnellere Unterbrechungserkennung
+                                        if speech_duration > 0.15:  # Reduziert von 0.2s für schnellere Reaktion
                                             logger.info(f"Direkte Unterbrechung: Benutzer spricht seit {speech_duration:.2f}s, Agent spricht seit {context_manager.agent_speaking_duration:.2f}s")
+                                            # Sofortige Unterbrechung senden
                                             await context_manager.handle_interruption(el_ws)
                                 except Exception as e:
                                     logger.error(f"Fehler bei direkter Energieprüfung: {e}")
@@ -913,7 +955,20 @@ async def handle_connection(websocket):
         ssl_context.check_hostname = True
         ssl_context.verify_mode = ssl.CERT_REQUIRED
         
-        el_ws = await websockets.connect(signed_url, ssl=ssl_context if signed_url.startswith("wss://") else None)
+        # Verbesserte WebSocket-Verbindung mit angepassten Headers
+        extra_headers = {
+            "Connection": "Upgrade",
+            "Upgrade": "websocket",
+            "Sec-WebSocket-Version": "13"
+        }
+        
+        el_ws = await websockets.connect(
+            signed_url, 
+            ssl=ssl_context if signed_url.startswith("wss://") else None,
+            extra_headers=extra_headers,
+            ping_interval=20,  # Regelmäßige Ping-Nachrichten senden
+            ping_timeout=60    # Längerer Timeout für Ping-Antworten
+        )
         logger.info("WebSocket-Verbindung hergestellt")
 
         # Initialisierung senden
