@@ -15,7 +15,7 @@ import math
 from websockets.connection import State
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, ConnectionClosedError
 
-SCRIPT_VERSION = "5.0 - Barge-in Support + Resilient Connections"
+SCRIPT_VERSION = "5.1 - Barge-in Support + Websockets 15.0.1 Compatibility"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
@@ -30,7 +30,7 @@ WEBSOCKET_PORT = int(os.environ.get("WEBSOCKET_PORT", "8080"))
 VAD_ENERGY_THRESHOLD = float(os.environ.get("VAD_ENERGY_THRESHOLD", "0.05"))
 VAD_SPEECH_DURATION_THRESHOLD = float(os.environ.get("VAD_SPEECH_DURATION_THRESHOLD", "0.2"))
 VAD_SILENCE_DURATION_THRESHOLD = float(os.environ.get("VAD_SILENCE_DURATION_THRESHOLD", "0.5"))
-LOG_INTERVAL = int(os.environ.get("LOG_INTERVAL", "300"))  # 5 Minuten statt 60 Sekunden
+LOG_INTERVAL = int(os.environ.get("LOG_INTERVAL", "300"))  # 5 Minuten
 
 if not ELEVENLABS_API_KEY or not ELEVENLABS_AGENT_ID:
     logger.error("API Key oder Agent ID fehlt! Abbruch.")
@@ -56,59 +56,9 @@ def mulaw_decode(sample):
     result = sign * (((1 + sample) * 2) ** (1/256) - 1)
     return result
 
-# NETZWERKQUALITÄTSMONITOR
-class NetworkQualityMonitor:
-    def __init__(self, window_size=100):
-        self.packet_times = []
-        self.window_size = window_size
-        self.expected_interval = 0.02  # 20ms für typische Audio-Chunks
-        self.packet_loss_count = 0
-        self.total_packets = 0
-        self.last_sequence_number = None
-    
-    def record_packet(self, timestamp, sequence_number=None):
-        self.packet_times.append(timestamp)
-        self.total_packets += 1
-        
-        # Paketverlust erkennen, wenn Sequenznummern vorhanden sind
-        if sequence_number is not None and self.last_sequence_number is not None:
-            expected_seq = (self.last_sequence_number + 1) % 65536  # Typischer Wrap-Around
-            if sequence_number != expected_seq:
-                # Schätze Anzahl verlorener Pakete
-                if sequence_number > expected_seq:
-                    lost = sequence_number - expected_seq
-                else:
-                    lost = (65536 - expected_seq) + sequence_number
-                self.packet_loss_count += lost
-        
-        self.last_sequence_number = sequence_number
-        
-        if len(self.packet_times) > self.window_size:
-            self.packet_times.pop(0)
-    
-    def record_packet_loss(self):
-        self.packet_loss_count += 1
-    
-    @property
-    def packet_loss_rate(self):
-        if self.total_packets == 0:
-            return 0.0
-        return min(1.0, self.packet_loss_count / max(1, self.total_packets))
-    
-    @property
-    def jitter(self):
-        if len(self.packet_times) < 2:
-            return 0.0
-        
-        intervals = [self.packet_times[i] - self.packet_times[i-1] 
-                    for i in range(1, len(self.packet_times))]
-        
-        deviations = [abs(interval - self.expected_interval) for interval in intervals]
-        return sum(deviations) / len(deviations) * 1000  # in ms
-
 # METRIKEN-SAMMLUNG
 class MetricsCollector:
-    def __init__(self, log_interval=LOG_INTERVAL):  # 5 Minuten statt 60 Sekunden
+    def __init__(self, log_interval=LOG_INTERVAL):
         self.metrics = {
             "packets_received": 0,
             "packets_sent": 0,
@@ -117,8 +67,6 @@ class MetricsCollector:
             "backchanneling_detected": 0,
             "reconnection_attempts": 0,
             "successful_reconnections": 0,
-            "average_latency": 0,
-            "latency_samples": [],
             "errors": {},
             "vad_triggers": 0,
             "context_switches": 0,
@@ -126,19 +74,10 @@ class MetricsCollector:
         }
         self.log_interval = log_interval
         self.start_time = time.time()
-        self.last_cleanup_time = time.time()
     
     def increment(self, metric, value=1):
         if metric in self.metrics:
             self.metrics[metric] += value
-    
-    def record_latency(self, latency_ms):
-        self.metrics["latency_samples"].append(latency_ms)
-        # Berechne gleitenden Durchschnitt
-        self.metrics["average_latency"] = sum(self.metrics["latency_samples"]) / len(self.metrics["latency_samples"])
-        # Begrenze die Anzahl der Samples auf 50 statt 100
-        if len(self.metrics["latency_samples"]) > 50:
-            self.metrics["latency_samples"] = self.metrics["latency_samples"][-50:]
     
     def record_error(self, error_type, error_message):
         if error_type not in self.metrics["errors"]:
@@ -146,21 +85,8 @@ class MetricsCollector:
         self.metrics["errors"][error_type] += 1
         logger.error(f"{error_type}: {error_message}")
     
-    def _cleanup_old_metrics(self):
-        """Bereinigt alte Metriken, die nicht mehr benötigt werden."""
-        # Hier könnten weitere Bereinigungen hinzugefügt werden
-        pass
-    
-    def _log_critical_metrics(self):
-        """Loggt nur die wichtigsten Metriken bei hoher Last."""
-        runtime = time.time() - self.start_time
-        logger.info(f"KRITISCHE METRIKEN NACH {runtime:.1f}s:")
-        logger.info(f"  Pakete: {self.metrics['packets_received']} empfangen, {self.metrics['packets_sent']} gesendet")
-        logger.info(f"  Unterbrechungen: {self.metrics['interruptions_detected']}")
-        logger.info(f"  Fehler: {sum(self.metrics['errors'].values())}")
-    
-    def _log_all_metrics(self):
-        """Loggt alle Metriken bei normaler Last."""
+    def _log_metrics(self):
+        """Loggt alle Metriken."""
         runtime = time.time() - self.start_time
         
         # Berechne abgeleitete Metriken
@@ -175,7 +101,6 @@ class MetricsCollector:
         logger.info(f"  Backchanneling erkannt: {self.metrics['backchanneling_detected']}")
         logger.info(f"  Wiederverbindungsversuche: {self.metrics['reconnection_attempts']}")
         logger.info(f"  Erfolgreiche Wiederverbindungen: {self.metrics['successful_reconnections']}")
-        logger.info(f"  Durchschnittliche Latenz: {self.metrics['average_latency']:.2f}ms")
         logger.info(f"  VAD-Trigger: {self.metrics['vad_triggers']}")
         logger.info(f"  Kontextwechsel: {self.metrics['context_switches']}")
         logger.info(f"  Kontext-Steuerung Fehler: {self.metrics['context_control_failures']}")
@@ -188,18 +113,7 @@ class MetricsCollector:
     async def log_metrics(self):
         while True:
             await asyncio.sleep(self.log_interval)
-            
-            # Zeitbasierte Bereinigung
-            current_time = time.time()
-            if current_time - self.last_cleanup_time > 300:  # Alle 5 Minuten
-                self._cleanup_old_metrics()
-                self.last_cleanup_time = current_time
-            
-            # Reduziere Logging bei hoher Last
-            if self.metrics["packets_received"] > 10000:  # Hohe Last
-                self._log_critical_metrics()
-            else:
-                self._log_all_metrics()
+            self._log_metrics()
 
 # Globale Metriken-Instanz
 metrics = MetricsCollector()
@@ -447,181 +361,6 @@ class ContextManager:
         self.agent_speaking_start_time = None
         self.agent_in_pause = False
 
-# RESILIENT WEBSOCKET CLIENT
-class ResilientWebSocketClient:
-    def __init__(self, url_provider, max_retries=5, initial_backoff=1.0, max_backoff=60.0):
-        self.url_provider = url_provider  # Funktion, die die URL zurückgibt
-        self.ws = None
-        self.max_retries = max_retries
-        self.initial_backoff = initial_backoff
-        self.max_backoff = max_backoff
-        self.connection_state = "DISCONNECTED"
-        self.retry_count = 0
-        self.last_activity = None
-        self.on_reconnect_callback = None
-        
-    async def connect(self):
-        self.connection_state = "CONNECTING"
-        backoff = self.initial_backoff
-        
-        while self.retry_count < self.max_retries:
-            try:
-                url = await self.url_provider()
-                if not url:
-                    raise ValueError("Konnte keine gültige URL erhalten")
-                
-                # Sicherstellen, dass die URL mit wss:// beginnt
-                if not url.startswith("wss://"):
-                    logger.warning(f"Unsichere WebSocket-URL: {url}")
-                
-                # Explizite SSL-Kontext-Konfiguration für maximale Sicherheit
-                ssl_context = ssl.create_default_context()
-                ssl_context.check_hostname = True
-                ssl_context.verify_mode = ssl.CERT_REQUIRED
-                
-                self.ws = await websockets.connect(url, ssl=ssl_context if url.startswith("wss://") else None)
-                self.connection_state = "CONNECTED"
-                self.retry_count = 0
-                self.last_activity = time.time()
-                logger.info(f"WebSocket-Verbindung hergestellt")
-                
-                # Starte Heartbeat-Task
-                asyncio.create_task(self._heartbeat())
-                
-                # Wenn es eine Wiederverbindung war, rufe Callback auf
-                if self.on_reconnect_callback and self.retry_count > 0:
-                    metrics.increment("successful_reconnections")
-                    await self.on_reconnect_callback(self.ws)
-                
-                return self.ws
-                
-            except Exception as e:
-                self.connection_state = "RECONNECTING"
-                self.retry_count += 1
-                metrics.increment("reconnection_attempts")
-                metrics.record_error("WebSocketConnectionError", str(e))
-                logger.warning(f"Verbindungsfehler (Versuch {self.retry_count}/{self.max_retries}): {e}")
-                
-                # Exponentielles Backoff
-                await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, self.max_backoff)
-        
-        self.connection_state = "FAILED"
-        logger.error(f"Maximale Anzahl an Wiederverbindungsversuchen erreicht ({self.max_retries})")
-        raise ConnectionError(f"Konnte nach {self.max_retries} Versuchen keine Verbindung herstellen")
-    
-    async def send(self, message):
-        if not self.ws or self.connection_state != "CONNECTED":
-            await self.connect()
-        
-        try:
-            await self.ws.send(message)
-            self.last_activity = time.time()
-            metrics.increment("packets_sent")
-        except Exception as e:
-            logger.error(f"Fehler beim Senden: {e}")
-            metrics.record_error("WebSocketSendError", str(e))
-            await self.connect()  # Versuche erneut zu verbinden
-            await self.ws.send(message)  # Versuche erneut zu senden
-    
-    async def receive(self):
-        if not self.ws or self.connection_state != "CONNECTED":
-            await self.connect()
-        
-        try:
-            message = await self.ws.recv()
-            self.last_activity = time.time()
-            metrics.increment("packets_received")
-            return message
-        except Exception as e:
-            logger.error(f"Fehler beim Empfangen: {e}")
-            metrics.record_error("WebSocketReceiveError", str(e))
-            await self.connect()  # Versuche erneut zu verbinden
-            return await self.ws.recv()  # Versuche erneut zu empfangen
-    
-    async def _heartbeat(self):
-        while self.connection_state == "CONNECTED":
-            try:
-                # Sende Ping alle 30 Sekunden, wenn keine Aktivität
-                current_time = time.time()
-                if self.last_activity and current_time - self.last_activity > 30:
-                    await self.ws.ping()
-                    logger.debug("Heartbeat-Ping gesendet")
-                
-                await asyncio.sleep(10)  # Prüfe alle 10 Sekunden
-            except Exception as e:
-                logger.warning(f"Heartbeat-Fehler: {e}")
-                metrics.record_error("HeartbeatError", str(e))
-                break
-        
-        # Wenn wir hier ankommen, ist die Verbindung unterbrochen
-        if self.connection_state != "FAILED":
-            self.connection_state = "RECONNECTING"
-            asyncio.create_task(self.connect())
-
-# WRAPPER FÜR BESTEHENDE WEBSOCKET-VERBINDUNG
-class ResilientWebSocketWrapper:
-    def __init__(self, ws):
-        self.ws = ws
-        self.last_activity = time.time()
-    
-    async def send(self, message):
-        try:
-            await self.ws.send(message)
-            self.last_activity = time.time()
-            metrics.increment("packets_sent")
-        except Exception as e:
-            logger.error(f"Fehler beim Senden an Talkdesk: {e}")
-            metrics.record_error("TalkdeskSendError", str(e))
-            raise  # Hier können wir nicht viel tun, da die Verbindung extern verwaltet wird
-    
-    async def receive(self):
-        try:
-            message = await self.ws.recv()
-            self.last_activity = time.time()
-            metrics.increment("packets_received")
-            return message
-        except Exception as e:
-            logger.error(f"Fehler beim Empfangen von Talkdesk: {e}")
-            metrics.record_error("TalkdeskReceiveError", str(e))
-            raise  # Hier können wir nicht viel tun, da die Verbindung extern verwaltet wird
-
-# ADAPTIVE BUFFER FÜR AUDIO-STREAMING
-class AdaptiveBuffer:
-    def __init__(self, initial_size=3, min_size=2, max_size=10):
-        self.buffer = []
-        self.target_size = initial_size
-        self.min_size = min_size
-        self.max_size = max_size
-        self.network_quality = 1.0  # 0.0 (schlecht) bis 1.0 (ausgezeichnet)
-        
-    def update_network_quality(self, packet_loss_rate, jitter):
-        # Berechnung der Netzwerkqualität basierend auf Paketverlust und Jitter
-        self.network_quality = max(0.0, min(1.0, 1.0 - packet_loss_rate - (jitter / 100.0)))
-        
-        # Anpassung der Ziel-Puffergröße
-        if self.network_quality > 0.8:
-            self.target_size = self.min_size
-        elif self.network_quality < 0.4:
-            self.target_size = self.max_size
-        else:
-            # Lineare Interpolation zwischen min und max
-            quality_factor = (self.network_quality - 0.4) / 0.4
-            self.target_size = int(self.max_size - quality_factor * (self.max_size - self.min_size))
-    
-    async def add_packet(self, packet):
-        self.buffer.append(packet)
-        
-        # Wenn der Puffer die Zielgröße überschreitet, verarbeite Pakete
-        if len(self.buffer) >= self.target_size:
-            return self.get_packets()
-        return None
-    
-    def get_packets(self):
-        packets = self.buffer.copy()
-        self.buffer.clear()
-        return packets
-
 # SANITIZE LOG FUNCTION
 def sanitize_log(message, sensitive_fields=["xi-api-key", "api_key", "password"]):
     """Maskiert sensible Daten in Log-Nachrichten."""
@@ -669,71 +408,24 @@ async def get_elevenlabs_signed_url():
         return None
 
 # AUDIO BRIDGING MIT BARGE-IN UNTERSTÜTZUNG
-async def stream_talkdesk_to_elevenlabs(td_ws, el_ws, context_manager):
+async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
     vad = SimpleVAD()
     interruption_classifier = InterruptionClassifier()
     speech_start_time = None
-    network_monitor = NetworkQualityMonitor()
-    adaptive_buffer = AdaptiveBuffer()
-    last_packet_time = None
     
     try:
-        async for message_str in td_ws:
-            data = json.loads(message_str)
-            if data.get("event") == "media":
-                payload = data.get("media", {}).get("payload")
-                if payload:
-                    metrics.increment("audio_chunks_processed")
-                    current_time = time.time()
-                    
-                    # Netzwerkqualität messen
-                    if last_packet_time:
-                        network_monitor.record_packet(current_time)
-                    last_packet_time = current_time
-                    
-                    # Pufferverwaltung
-                    adaptive_buffer.update_network_quality(
-                        network_monitor.packet_loss_rate,
-                        network_monitor.jitter
-                    )
-                    
-                    buffered_packets = await adaptive_buffer.add_packet(payload)
-                    
-                    # Wenn Puffer voll ist, verarbeite alle Pakete
-                    if buffered_packets:
-                        for packet in buffered_packets:
-                            # VAD-Prüfung
-                            if vad.is_voice_active(packet, current_time):
-                                if speech_start_time is None:
-                                    speech_start_time = current_time
-                                
-                                # Wenn Agent spricht, klassifiziere die Unterbrechung
-                                if context_manager.is_agent_speaking:
-                                    speech_duration = current_time - speech_start_time
-                                    energy = vad.calculate_energy(packet)
-                                    
-                                    interruption_type = interruption_classifier.classify_interruption(
-                                        speech_duration, 
-                                        energy,
-                                        context_manager.agent_speaking_duration,
-                                        context_manager.agent_in_pause
-                                    )
-                                    
-                                    if interruption_type == "INTERRUPTION":
-                                        # Harte Unterbrechung - Stoppe den Agenten und erstelle neuen Kontext
-                                        await context_manager.handle_interruption(el_ws)
-                                    elif interruption_type == "BACKCHANNELING" and not context_manager.agent_in_pause:
-                                        # Weiche Unterbrechung - Pausiere kurz, setze dann fort
-                                        await context_manager.handle_backchanneling(el_ws)
-                            
-                            # Audio an ElevenLabs senden
-                            await el_ws.send(json.dumps({"user_audio_chunk": packet}))
-                            
-                            # Reset, wenn keine Sprache mehr erkannt wird
-                            if not vad.is_speaking and speech_start_time is not None:
-                                speech_start_time = None
-                    else:
-                        # Wenn Puffer noch nicht voll, sende direkt
+        while True:
+            try:
+                # Direkte Verwendung des Websocket-Objekts ohne Wrapper
+                message_str = await websocket.recv()
+                data = json.loads(message_str)
+                
+                if data.get("event") == "media":
+                    payload = data.get("media", {}).get("payload")
+                    if payload:
+                        metrics.increment("audio_chunks_processed")
+                        current_time = time.time()
+                        
                         # VAD-Prüfung
                         if vad.is_voice_active(payload, current_time):
                             if speech_start_time is None:
@@ -760,58 +452,81 @@ async def stream_talkdesk_to_elevenlabs(td_ws, el_ws, context_manager):
                         
                         # Audio an ElevenLabs senden
                         await el_ws.send(json.dumps({"user_audio_chunk": payload}))
+                        metrics.increment("packets_sent")
                         
                         # Reset, wenn keine Sprache mehr erkannt wird
                         if not vad.is_speaking and speech_start_time is not None:
                             speech_start_time = None
+            except ConnectionClosed:
+                logger.info("Talkdesk WebSocket-Verbindung geschlossen")
+                break
+            except Exception as e:
+                logger.error(f"Fehler beim Verarbeiten der Talkdesk-Nachricht: {e}")
+                metrics.record_error("TalkdeskMessageError", str(e))
+                # Versuche weiterzumachen
+                await asyncio.sleep(0.1)
     except Exception as e:
         logger.error(f"Fehler in stream_talkdesk_to_elevenlabs: {e}", exc_info=True)
         metrics.record_error("TalkdeskToElevenLabsError", str(e))
 
-async def stream_elevenlabs_to_talkdesk(td_ws, el_ws, stream_sid, context_manager):
+async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_manager):
     try:
-        async for message_str in el_ws:
-            data = json.loads(message_str)
-            
-            # Verarbeite Audio-Events
-            if data.get("type") == "audio":
-                b64_audio = data.get("audio_event", {}).get("audio_base_64")
-                if b64_audio:
-                    # Markiere Agent als sprechend
-                    context_manager.agent_started_speaking()
-                    
-                    # Sende Audio an Talkdesk
-                    await td_ws.send(json.dumps({
-                        "event": "media",
-                        "streamSid": stream_sid,
-                        "media": {"payload": b64_audio}
-                    }))
-            
-            # Verarbeite Kontext-Events
-            elif data.get("type") == "context_control_response":
-                control_response = data.get("context_control_response", {})
-                action = control_response.get("action")
-                success = control_response.get("success", False)
+        while True:
+            try:
+                # Direkte Verwendung des WebSocket-Objekts
+                message_str = await el_ws.recv()
+                metrics.increment("packets_received")
                 
-                if action == "abort" and success:
-                    logger.info("Kontext erfolgreich abgebrochen")
+                data = json.loads(message_str)
+                
+                # Verarbeite Audio-Events
+                if data.get("type") == "audio":
+                    b64_audio = data.get("audio_event", {}).get("audio_base_64")
+                    if b64_audio:
+                        # Markiere Agent als sprechend
+                        context_manager.agent_started_speaking()
+                        
+                        # Sende Audio an Talkdesk
+                        await websocket.send(json.dumps({
+                            "event": "media",
+                            "streamSid": stream_sid,
+                            "media": {"payload": b64_audio}
+                        }))
+                        metrics.increment("packets_sent")
+                
+                # Verarbeite Kontext-Events
+                elif data.get("type") == "context_control_response":
+                    control_response = data.get("context_control_response", {})
+                    action = control_response.get("action")
+                    success = control_response.get("success", False)
+                    
+                    if action == "abort" and success:
+                        logger.info("Kontext erfolgreich abgebrochen")
+                        context_manager.agent_stopped_speaking()
+                    elif action == "pause" and success:
+                        logger.info("Kontext erfolgreich pausiert")
+                    elif action == "resume" and success:
+                        logger.info("Kontext erfolgreich fortgesetzt")
+                
+                # Verarbeite End-Events
+                elif data.get("type") == "end":
+                    logger.info("Ende des Streams von ElevenLabs")
                     context_manager.agent_stopped_speaking()
-                elif action == "pause" and success:
-                    logger.info("Kontext erfolgreich pausiert")
-                elif action == "resume" and success:
-                    logger.info("Kontext erfolgreich fortgesetzt")
-            
-            # Verarbeite End-Events
-            elif data.get("type") == "end":
-                logger.info("Ende des Streams von ElevenLabs")
-                context_manager.agent_stopped_speaking()
+            except ConnectionClosed:
+                logger.info("ElevenLabs WebSocket-Verbindung geschlossen")
+                break
+            except Exception as e:
+                logger.error(f"Fehler beim Verarbeiten der ElevenLabs-Nachricht: {e}")
+                metrics.record_error("ElevenLabsMessageError", str(e))
+                # Versuche weiterzumachen
+                await asyncio.sleep(0.1)
     except Exception as e:
         logger.error(f"Fehler in stream_elevenlabs_to_talkdesk: {e}", exc_info=True)
         metrics.record_error("ElevenLabsToTalkdeskError", str(e))
 
 # REFAKTORIERTER CONNECTION HANDLER
-async def handle_connection(talkdesk_ws):
-    remote = f"{talkdesk_ws.remote_address[0]}:{talkdesk_ws.remote_address[1]}"
+async def handle_connection(websocket):
+    remote = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
     logger.info(f"Neue Verbindung von {remote}")
 
     try:
@@ -819,7 +534,7 @@ async def handle_connection(talkdesk_ws):
         # START-NACHRICHT PARSEN
         for _ in range(5):
             try:
-                msg = await asyncio.wait_for(talkdesk_ws.recv(), timeout=10)
+                msg = await asyncio.wait_for(websocket.recv(), timeout=10)
                 data = json.loads(msg)
                 if data.get("event") == "start":
                     stream_sid = data["start"].get("streamSid")
@@ -835,40 +550,55 @@ async def handle_connection(talkdesk_ws):
             logger.error("Kein StreamSid erhalten. Abbruch.")
             return
 
-        # Resiliente Wrapper für WebSockets erstellen
-        resilient_td_ws = ResilientWebSocketWrapper(talkdesk_ws)
-        
-        # ElevenLabs WebSocket mit Wiederverbindungslogik
+        # ElevenLabs WebSocket-Verbindung herstellen
         signed_url = await get_elevenlabs_signed_url()
         if not signed_url:
             logger.error("Konnte keine Signed URL erhalten. Abbruch.")
             return
             
-        resilient_el_ws = ResilientWebSocketClient(lambda: asyncio.create_task(get_elevenlabs_signed_url()))
-        el_ws = await resilient_el_ws.connect()
+        # Direkte WebSocket-Verbindung ohne Wrapper
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = True
+        ssl_context.verify_mode = ssl.CERT_REQUIRED
+        
+        el_ws = await websockets.connect(signed_url, ssl=ssl_context if signed_url.startswith("wss://") else None)
+        logger.info("WebSocket-Verbindung hergestellt")
 
         # Initialisierung senden
         initial_config = build_initial_config()
-        await resilient_el_ws.send(json.dumps(initial_config))
+        await el_ws.send(json.dumps(initial_config))
+        metrics.increment("packets_sent")
         
         # Kontext-Manager initialisieren
         context_manager = ContextManager()
-        await context_manager.start_new_context(resilient_el_ws)
+        await context_manager.start_new_context(el_ws)
 
         # TASKS STARTEN
-        task1 = asyncio.create_task(stream_talkdesk_to_elevenlabs(resilient_td_ws, resilient_el_ws, context_manager))
-        task2 = asyncio.create_task(stream_elevenlabs_to_talkdesk(resilient_td_ws, resilient_el_ws, stream_sid, context_manager))
+        task1 = asyncio.create_task(stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager))
+        task2 = asyncio.create_task(stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_manager))
         task3 = asyncio.create_task(metrics.log_metrics())
         
-        await asyncio.wait([task1, task2], return_when=asyncio.FIRST_COMPLETED)
+        # Warte auf das Ende einer der Streaming-Tasks
+        done, pending = await asyncio.wait(
+            [task1, task2], 
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        
+        # Bereinige verbleibende Tasks
+        for task in pending:
+            task.cancel()
+            
+        # Warte kurz, damit Logs geschrieben werden können
+        await asyncio.sleep(0.5)
 
     except Exception as e:
         logger.error(f"Fehler in Handler: {e}", exc_info=True)
         metrics.record_error("ConnectionHandlerError", str(e))
     finally:
         logger.info("Verbindung wird geschlossen")
-        if talkdesk_ws and talkdesk_ws.open:
-            await talkdesk_ws.close()
+        # Prüfe den Status der WebSocket-Verbindung mit der korrekten API
+        if websocket.state == State.OPEN:
+            await websocket.close()
 
 # SERVER START
 async def main():
