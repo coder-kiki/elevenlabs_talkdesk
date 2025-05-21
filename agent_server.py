@@ -15,7 +15,7 @@ import math
 from websockets.connection import State
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, ConnectionClosedError
 
-SCRIPT_VERSION = "5.3 - Fixed Barge-in Support + Error Handling"
+SCRIPT_VERSION = "5.4 - Optimized Barge-in with Low-Energy Detection"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
@@ -27,7 +27,7 @@ POC_PROMPT = os.environ.get("ELEVENLABS_POC_PROMPT")
 POC_FIRST_MESSAGE = os.environ.get("ELEVENLABS_POC_FIRST_MESSAGE")
 WEBSOCKET_HOST = os.environ.get("WEBSOCKET_HOST", "0.0.0.0")
 WEBSOCKET_PORT = int(os.environ.get("WEBSOCKET_PORT", "8080"))
-VAD_ENERGY_THRESHOLD = float(os.environ.get("VAD_ENERGY_THRESHOLD", "0.01"))  # Niedrigerer Schwellenwert für bessere Erkennung
+VAD_ENERGY_THRESHOLD = float(os.environ.get("VAD_ENERGY_THRESHOLD", "0.0008"))  # Drastisch reduzierter Schwellenwert basierend auf tatsächlichen Energiewerten
 VAD_SPEECH_DURATION_THRESHOLD = float(os.environ.get("VAD_SPEECH_DURATION_THRESHOLD", "0.1"))  # Kürzere Erkennungszeit
 VAD_SILENCE_DURATION_THRESHOLD = float(os.environ.get("VAD_SILENCE_DURATION_THRESHOLD", "0.5"))
 LOG_INTERVAL = int(os.environ.get("LOG_INTERVAL", "300"))  # 5 Minuten
@@ -151,19 +151,29 @@ class SimpleVAD:
             format_str = f"{len(audio_bytes)}B"  # 'B' für unsigned char (8-bit)
             samples = struct.unpack(format_str, audio_bytes)
             
-            # μ-law Dekodierung und Normalisierung
-            normalized_samples = [mulaw_decode(s) for s in samples]
+            # Berechne direkte Energie ohne μ-law Dekodierung
+            # Dies ist robuster und schneller für Echtzeit-Anwendungen
+            raw_energy = sum(abs(s - 128) for s in samples) / len(samples)
             
-            # Berechne RMS-Energie
-            if not samples:
-                return 0
+            # Skalierungsfaktor, um die Energie in einen sinnvollen Bereich zu bringen
+            # Basierend auf den beobachteten Werten in den Logs
+            energy = raw_energy / 255.0
             
-            energy = sum(s*s for s in normalized_samples) / len(normalized_samples)
+            # Alternative Berechnung mit μ-law Dekodierung als Fallback
+            if energy < 0.0001:  # Wenn die direkte Energie sehr niedrig ist
+                # μ-law Dekodierung und Normalisierung
+                normalized_samples = [mulaw_decode(s) for s in samples]
+                energy = sum(s*s for s in normalized_samples) / len(normalized_samples)
+            
+            # Debug-Logging für sehr niedrige Energiewerte
+            if DEBUG_LOGGING and energy > 0.001:
+                logger.info(f"Erhöhte Energie erkannt: {energy:.6f} (raw: {raw_energy:.2f})")
+                
             return energy
             
         except Exception as e:
             logger.warning(f"Fehler bei Energieberechnung: {e}")
-            return 0
+            return 0.0005  # Fallback-Wert basierend auf typischen Hintergrundwerten
         
     def is_voice_active(self, audio_base64, current_time):
         energy = self.calculate_energy(audio_base64)
@@ -177,12 +187,22 @@ class SimpleVAD:
         # Aktualisieren des Hintergrundgeräuschpegels, wenn keine Sprache erkannt wird
         if not self.is_speaking:
             self.update_background_energy(energy)
-            
-        # Dynamischer Schwellenwert basierend auf Hintergrundgeräuschen
-        dynamic_threshold = max(self.energy_threshold, 
-                               self.background_energy * 1.2 if self.background_energy else self.energy_threshold)  # Niedrigerer Multiplikator
         
-        if energy > dynamic_threshold:
+        # Dynamischer Schwellenwert basierend auf Hintergrundgeräuschen
+        # Verwende einen niedrigeren Multiplikator und einen absoluten Mindestwert
+        dynamic_threshold = max(
+            self.energy_threshold,  # Absoluter Mindestwert
+            self.background_energy * 1.1 if self.background_energy else self.energy_threshold  # Nur 10% über Hintergrund
+        )
+        
+        # Relative Änderung zum Hintergrund berechnen
+        relative_change = energy / self.background_energy if self.background_energy else 1.0
+        
+        # Sprache erkennen basierend auf absolutem Schwellenwert ODER relativer Änderung
+        is_above_threshold = energy > dynamic_threshold
+        is_significant_change = relative_change > 1.5  # 50% Änderung zum Hintergrund
+        
+        if is_above_threshold or is_significant_change:
             if not self.is_speaking:
                 if self.speech_start_time is None:
                     self.speech_start_time = current_time
@@ -191,7 +211,7 @@ class SimpleVAD:
                     self.is_speaking = True
                     self.silence_start_time = None
                     metrics.increment("vad_triggers")
-                    logger.info(f"VAD: Sprache erkannt! Energie={energy:.6f}, Schwelle={dynamic_threshold:.6f}")
+                    logger.info(f"VAD: Sprache erkannt! Energie={energy:.6f}, Schwelle={dynamic_threshold:.6f}, Rel.Änderung={relative_change:.2f}")
                     return True
             else:
                 # Bereits sprechend, setze Silence-Timer zurück
@@ -209,7 +229,7 @@ class SimpleVAD:
                 return True  # Noch als sprechend betrachten während der Silence-Periode
             else:
                 self.speech_start_time = None
-                    
+        
         return self.is_speaking
 
 # INTERRUPTION CLASSIFIER
@@ -237,24 +257,23 @@ class InterruptionClassifier:
             if DEBUG_LOGGING:
                 logger.info(f"Interruption-Klassifikation: Dauer={duration:.2f}s, Energie={energy:.6f}, Agent-Sprechdauer={agent_speaking_duration:.2f}s")
             
-            # Immer als Unterbrechung klassifizieren, wenn der Agent spricht
-            # Dies ist aggressiver, aber effektiver für Barge-in
-            if agent_speaking_duration > 0.5:  # Bereits nach 0.5 Sekunden Agentensprache reagieren
+            # IMMER als Unterbrechung klassifizieren, wenn der Agent spricht
+            # Keine komplexe Klassifizierung mehr - jede erkannte Benutzersprache ist eine Unterbrechung
+            if agent_speaking_duration > 0.1:  # Sofort reagieren, wenn der Agent spricht
                 logger.info(f"Unterbrechung erkannt: Dauer={duration:.2f}s, Energie={energy:.6f}")
                 return "INTERRUPTION"
-                
-            # Kurze Äußerung mit niedriger Energie während Agent-Pause = Backchanneling
-            if duration < self.backchanneling_duration_threshold and energy < self.average_speech_energy * self.backchanneling_energy_ratio:
-                if agent_in_pause:
-                    logger.info(f"Backchanneling erkannt: Dauer={duration:.2f}s, Energie={energy:.6f}")
-                    return "BACKCHANNELING"
             
-            # Längere oder energiereichere Äußerung = echte Unterbrechung
-            logger.info(f"Unterbrechung erkannt: Dauer={duration:.2f}s, Energie={energy:.6f}")
+            # Nur wenn der Agent nicht spricht, als Backchanneling klassifizieren
+            if agent_in_pause:
+                logger.info(f"Backchanneling erkannt: Dauer={duration:.2f}s, Energie={energy:.6f}")
+                return "BACKCHANNELING"
+            
+            # Fallback: Als Unterbrechung behandeln
+            logger.info(f"Fallback-Unterbrechung erkannt: Dauer={duration:.2f}s, Energie={energy:.6f}")
             return "INTERRUPTION"
         except Exception as e:
             logger.error(f"Fehler bei Interruption-Klassifikation: {e}")
-            # Im Fehlerfall als Unterbrechung behandeln, um sicherzustellen, dass der Agent stoppt
+            # Im Fehlerfall als Unterbrechung behandeln
             return "INTERRUPTION"
 
 # KONTEXT-MANAGER FÜR ELEVENLABS
@@ -455,6 +474,11 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
     last_status_check = time.time()
     status_check_interval = 0.5  # Alle 0.5 Sekunden den Sprechstatus prüfen
     
+    # Statistik für Energiewerte
+    energy_samples = []
+    last_energy_stats_time = time.time()
+    energy_stats_interval = 10.0  # Alle 10 Sekunden Energiestatistiken loggen
+    
     try:
         while True:
             try:
@@ -475,6 +499,22 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                         metrics.increment("audio_chunks_processed")
                         
                         try:
+                            # Energieberechnung für Statistik
+                            try:
+                                energy = vad.calculate_energy(payload)
+                                energy_samples.append(energy)
+                                
+                                # Periodisch Energiestatistiken loggen
+                                if current_time - last_energy_stats_time > energy_stats_interval and len(energy_samples) > 10:
+                                    avg_energy = sum(energy_samples) / len(energy_samples)
+                                    max_energy = max(energy_samples)
+                                    min_energy = min(energy_samples)
+                                    logger.info(f"Energie-Statistik: Avg={avg_energy:.6f}, Min={min_energy:.6f}, Max={max_energy:.6f}, Samples={len(energy_samples)}")
+                                    energy_samples = energy_samples[-100:]  # Behalte nur die letzten 100 Samples
+                                    last_energy_stats_time = current_time
+                            except Exception as e:
+                                logger.error(f"Fehler bei Energieberechnung für Statistik: {e}")
+                            
                             # VAD-Prüfung mit Fehlerbehandlung
                             is_voice_active = False
                             try:
@@ -483,6 +523,26 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                 logger.error(f"VAD-Fehler: {vad_error}")
                                 # Trotz Fehler fortfahren
                             
+                            # Wenn Agent spricht, prüfe auf Unterbrechung, auch ohne VAD-Trigger
+                            if context_manager.is_agent_speaking:
+                                # Direkte Energieprüfung für Unterbrechungserkennung
+                                try:
+                                    direct_energy = vad.calculate_energy(payload)
+                                    # Wenn Energie signifikant über Hintergrund, als potenzielle Unterbrechung behandeln
+                                    if direct_energy > vad.background_energy * 1.3:
+                                        if speech_start_time is None:
+                                            speech_start_time = current_time
+                                            logger.info(f"Potenzielle Unterbrechung durch Energieanstieg: E={direct_energy:.6f}, BG={vad.background_energy:.6f}")
+                                        
+                                        # Behandle als Unterbrechung nach kurzer Zeit
+                                        speech_duration = current_time - speech_start_time
+                                        if speech_duration > 0.2:  # Sehr kurze Dauer für Unterbrechungserkennung
+                                            logger.info(f"Direkte Unterbrechung: Benutzer spricht seit {speech_duration:.2f}s, Agent spricht seit {context_manager.agent_speaking_duration:.2f}s")
+                                            await context_manager.handle_interruption(el_ws)
+                                except Exception as e:
+                                    logger.error(f"Fehler bei direkter Energieprüfung: {e}")
+                            
+                            # Standard VAD-basierte Verarbeitung
                             if is_voice_active:
                                 if speech_start_time is None:
                                     speech_start_time = current_time
@@ -496,28 +556,12 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                         energy = vad.calculate_energy(payload)
                                     except Exception as e:
                                         logger.error(f"Fehler bei Energieberechnung: {e}")
-                                        energy = 0.1  # Fallback-Wert
+                                        energy = 0.001  # Fallback-Wert basierend auf typischen Werten
                                     
                                     logger.info(f"Potenzielle Unterbrechung: Benutzer spricht seit {speech_duration:.2f}s, Agent spricht seit {context_manager.agent_speaking_duration:.2f}s")
                                     
-                                    try:
-                                        interruption_type = interruption_classifier.classify_interruption(
-                                            speech_duration, 
-                                            energy,
-                                            context_manager.agent_speaking_duration,
-                                            context_manager.agent_in_pause
-                                        )
-                                        
-                                        if interruption_type == "INTERRUPTION":
-                                            # Harte Unterbrechung - Stoppe den Agenten und erstelle neuen Kontext
-                                            await context_manager.handle_interruption(el_ws)
-                                        elif interruption_type == "BACKCHANNELING" and not context_manager.agent_in_pause:
-                                            # Weiche Unterbrechung - Pausiere kurz, setze dann fort
-                                            await context_manager.handle_backchanneling(el_ws)
-                                    except Exception as e:
-                                        logger.error(f"Fehler bei Unterbrechungsverarbeitung: {e}")
-                                        # Im Fehlerfall trotzdem versuchen, den Agenten zu unterbrechen
-                                        await context_manager.handle_interruption(el_ws)
+                                    # Sofort unterbrechen, ohne komplexe Klassifizierung
+                                    await context_manager.handle_interruption(el_ws)
                             
                             # Audio an ElevenLabs senden
                             await el_ws.send(json.dumps({"user_audio_chunk": payload}))
