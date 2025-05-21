@@ -15,7 +15,7 @@ import math
 from websockets.connection import State
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, ConnectionClosedError
 
-SCRIPT_VERSION = "5.1 - Barge-in Support + Websockets 15.0.1 Compatibility"
+SCRIPT_VERSION = "5.2 - Enhanced Barge-in Support + Debug Logging"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
@@ -27,10 +27,11 @@ POC_PROMPT = os.environ.get("ELEVENLABS_POC_PROMPT")
 POC_FIRST_MESSAGE = os.environ.get("ELEVENLABS_POC_FIRST_MESSAGE")
 WEBSOCKET_HOST = os.environ.get("WEBSOCKET_HOST", "0.0.0.0")
 WEBSOCKET_PORT = int(os.environ.get("WEBSOCKET_PORT", "8080"))
-VAD_ENERGY_THRESHOLD = float(os.environ.get("VAD_ENERGY_THRESHOLD", "0.05"))
-VAD_SPEECH_DURATION_THRESHOLD = float(os.environ.get("VAD_SPEECH_DURATION_THRESHOLD", "0.2"))
+VAD_ENERGY_THRESHOLD = float(os.environ.get("VAD_ENERGY_THRESHOLD", "0.01"))  # Niedrigerer Schwellenwert für bessere Erkennung
+VAD_SPEECH_DURATION_THRESHOLD = float(os.environ.get("VAD_SPEECH_DURATION_THRESHOLD", "0.1"))  # Kürzere Erkennungszeit
 VAD_SILENCE_DURATION_THRESHOLD = float(os.environ.get("VAD_SILENCE_DURATION_THRESHOLD", "0.5"))
 LOG_INTERVAL = int(os.environ.get("LOG_INTERVAL", "300"))  # 5 Minuten
+DEBUG_LOGGING = os.environ.get("DEBUG_LOGGING", "true").lower() == "true"  # Detaillierte Logs aktivieren
 
 if not ELEVENLABS_API_KEY or not ELEVENLABS_AGENT_ID:
     logger.error("API Key oder Agent ID fehlt! Abbruch.")
@@ -131,6 +132,8 @@ class SimpleVAD:
         self.silence_start_time = None
         self.background_energy = None
         self.adaptation_rate = 0.05  # Für adaptive Schwellenwertanpassung
+        self.last_energy_log_time = 0
+        self.energy_log_interval = 1.0  # Energielevel jede Sekunde loggen
         
     def update_background_energy(self, current_energy):
         if self.background_energy is None:
@@ -165,13 +168,18 @@ class SimpleVAD:
     def is_voice_active(self, audio_base64, current_time):
         energy = self.calculate_energy(audio_base64)
         
+        # Debug-Logging für Energielevel (begrenzt auf Intervalle)
+        if DEBUG_LOGGING and current_time - self.last_energy_log_time > self.energy_log_interval:
+            self.last_energy_log_time = current_time
+            logger.info(f"VAD: Energie={energy:.6f}, Schwelle={self.energy_threshold:.6f}, Hintergrund={self.background_energy:.6f if self.background_energy else 0:.6f}")
+        
         # Aktualisieren des Hintergrundgeräuschpegels, wenn keine Sprache erkannt wird
         if not self.is_speaking:
             self.update_background_energy(energy)
             
         # Dynamischer Schwellenwert basierend auf Hintergrundgeräuschen
         dynamic_threshold = max(self.energy_threshold, 
-                               self.background_energy * 1.3 if self.background_energy else self.energy_threshold)
+                               self.background_energy * 1.2 if self.background_energy else self.energy_threshold)  # Niedrigerer Multiplikator
         
         if energy > dynamic_threshold:
             if not self.is_speaking:
@@ -182,6 +190,7 @@ class SimpleVAD:
                     self.is_speaking = True
                     self.silence_start_time = None
                     metrics.increment("vad_triggers")
+                    logger.info(f"VAD: Sprache erkannt! Energie={energy:.6f}, Schwelle={dynamic_threshold:.6f}")
                     return True
             else:
                 # Bereits sprechend, setze Silence-Timer zurück
@@ -194,6 +203,7 @@ class SimpleVAD:
                 elif current_time - self.silence_start_time >= self.silence_duration_threshold:
                     self.is_speaking = False
                     self.speech_start_time = None
+                    logger.info(f"VAD: Sprache beendet. Stille für {self.silence_duration_threshold}s")
                     return False
                 return True  # Noch als sprechend betrachten während der Silence-Periode
             else:
@@ -204,8 +214,8 @@ class SimpleVAD:
 # INTERRUPTION CLASSIFIER
 class InterruptionClassifier:
     def __init__(self):
-        self.backchanneling_duration_threshold = 1.0  # Sekunden
-        self.backchanneling_energy_ratio = 0.7  # Im Vergleich zur durchschnittlichen Sprachenergie
+        self.backchanneling_duration_threshold = 0.8  # Sekunden (kürzer für schnellere Erkennung)
+        self.backchanneling_energy_ratio = 0.8  # Im Vergleich zur durchschnittlichen Sprachenergie (höher für aggressivere Erkennung)
         self.average_speech_energy = 0.1  # Startwert, wird dynamisch angepasst
         self.speech_energy_samples = []
         
@@ -221,12 +231,18 @@ class InterruptionClassifier:
         # Aktualisiere durchschnittliche Sprachenergie
         self.update_average_speech_energy(energy)
         
+        # Debug-Logging
+        if DEBUG_LOGGING:
+            logger.info(f"Interruption-Klassifikation: Dauer={duration:.2f}s, Energie={energy:.6f}, Agent-Sprechdauer={agent_speaking_duration:.2f}s")
+        
         # Kurze Äußerung mit niedriger Energie während Agent-Pause = Backchanneling
         if duration < self.backchanneling_duration_threshold and energy < self.average_speech_energy * self.backchanneling_energy_ratio:
-            if agent_in_pause or agent_speaking_duration > 5.0:  # Nach 5 Sekunden Agentensprache
+            if agent_in_pause or agent_speaking_duration > 3.0:  # Nach 3 Sekunden Agentensprache (früher reagieren)
+                logger.info(f"Backchanneling erkannt: Dauer={duration:.2f}s, Energie={energy:.6f}")
                 return "BACKCHANNELING"
         
         # Längere oder energiereichere Äußerung = echte Unterbrechung
+        logger.info(f"Unterbrechung erkannt: Dauer={duration:.2f}s, Energie={energy:.6f}")
         return "INTERRUPTION"
 
 # KONTEXT-MANAGER FÜR ELEVENLABS
@@ -236,6 +252,8 @@ class ContextManager:
         self.is_agent_speaking = False
         self.agent_speaking_start_time = None
         self.agent_in_pause = False
+        self.last_audio_time = 0
+        self.audio_timeout = 0.5  # Wenn 0.5s kein Audio, dann spricht der Agent nicht mehr
         
     @property
     def agent_speaking_duration(self):
@@ -270,8 +288,15 @@ class ContextManager:
         if self.is_agent_speaking and self.current_context_id:
             logger.info(f"Unterbrechung erkannt, stoppe Kontext {self.current_context_id}")
             
+            # Sende beide Signale gleichzeitig für maximale Wirkung
             try:
-                # Primäre Methode: Kontext-Steuerung
+                # Sende direkte Interruption (einfacher und schneller)
+                await ws.send(json.dumps({
+                    "type": "interruption"
+                }))
+                logger.info("Direktes Interruption-Signal gesendet")
+                
+                # Sende auch Kontext-Steuerung (für vollständige Kontrolle)
                 await ws.send(json.dumps({
                     "type": "context_control",
                     "context_control": {
@@ -279,6 +304,7 @@ class ContextManager:
                         "context_id": self.current_context_id
                     }
                 }))
+                logger.info("Kontext-Abort-Signal gesendet")
                 
                 # Markiere Agent als nicht mehr sprechend
                 self.is_agent_speaking = False
@@ -290,28 +316,9 @@ class ContextManager:
                 # Starte einen neuen Kontext
                 await self.start_new_context(ws)
             except Exception as e:
-                logger.error(f"Fehler bei Kontext-Steuerung (abort): {e}")
+                logger.error(f"Fehler bei Interruption-Signalen: {e}")
                 metrics.increment("context_control_failures")
-                
-                try:
-                    # Fallback: Standard-Interruption
-                    logger.warning("Verwende Fallback-Interruption")
-                    await ws.send(json.dumps({
-                        "type": "interruption"
-                    }))
-                    
-                    # Markiere Agent als nicht mehr sprechend
-                    self.is_agent_speaking = False
-                    self.agent_speaking_start_time = None
-                    self.agent_in_pause = False
-                    
-                    metrics.increment("interruptions_detected")
-                    
-                    # Starte einen neuen Kontext
-                    await self.start_new_context(ws)
-                except Exception as e2:
-                    logger.error(f"Auch Fallback-Interruption fehlgeschlagen: {e2}")
-                    metrics.record_error("InterruptionError", str(e2))
+                metrics.record_error("InterruptionError", str(e))
     
     async def handle_backchanneling(self, ws):
         if self.is_agent_speaking and self.current_context_id and not self.agent_in_pause:
@@ -351,15 +358,28 @@ class ContextManager:
                 self.agent_in_pause = False
     
     def agent_started_speaking(self):
+        current_time = time.time()
+        self.last_audio_time = current_time
+        
         if not self.is_agent_speaking:
             self.is_agent_speaking = True
-            self.agent_speaking_start_time = time.time()
+            self.agent_speaking_start_time = current_time
             self.agent_in_pause = False
+            logger.info("Agent hat begonnen zu sprechen")
     
     def agent_stopped_speaking(self):
+        if self.is_agent_speaking:
+            logger.info(f"Agent hat aufgehört zu sprechen (nach {self.agent_speaking_duration:.2f}s)")
+        
         self.is_agent_speaking = False
         self.agent_speaking_start_time = None
         self.agent_in_pause = False
+    
+    def update_speaking_status(self, current_time):
+        """Aktualisiert den Sprechstatus basierend auf der Zeit seit dem letzten Audio-Chunk"""
+        if self.is_agent_speaking and current_time - self.last_audio_time > self.audio_timeout:
+            logger.info(f"Kein Audio vom Agent seit {self.audio_timeout}s - setze Status auf 'nicht sprechend'")
+            self.agent_stopped_speaking()
 
 # SANITIZE LOG FUNCTION
 def sanitize_log(message, sensitive_fields=["xi-api-key", "api_key", "password"]):
@@ -412,6 +432,8 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
     vad = SimpleVAD()
     interruption_classifier = InterruptionClassifier()
     speech_start_time = None
+    last_status_check = time.time()
+    status_check_interval = 0.5  # Alle 0.5 Sekunden den Sprechstatus prüfen
     
     try:
         while True:
@@ -420,21 +442,30 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                 message_str = await websocket.recv()
                 data = json.loads(message_str)
                 
+                current_time = time.time()
+                
+                # Regelmäßige Überprüfung des Agent-Sprechstatus
+                if current_time - last_status_check > status_check_interval:
+                    context_manager.update_speaking_status(current_time)
+                    last_status_check = current_time
+                
                 if data.get("event") == "media":
                     payload = data.get("media", {}).get("payload")
                     if payload:
                         metrics.increment("audio_chunks_processed")
-                        current_time = time.time()
                         
                         # VAD-Prüfung
                         if vad.is_voice_active(payload, current_time):
                             if speech_start_time is None:
                                 speech_start_time = current_time
+                                logger.info("Benutzersprache erkannt")
                             
                             # Wenn Agent spricht, klassifiziere die Unterbrechung
                             if context_manager.is_agent_speaking:
                                 speech_duration = current_time - speech_start_time
                                 energy = vad.calculate_energy(payload)
+                                
+                                logger.info(f"Potenzielle Unterbrechung: Benutzer spricht seit {speech_duration:.2f}s, Agent spricht seit {context_manager.agent_speaking_duration:.2f}s")
                                 
                                 interruption_type = interruption_classifier.classify_interruption(
                                     speech_duration, 
@@ -456,6 +487,7 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                         
                         # Reset, wenn keine Sprache mehr erkannt wird
                         if not vad.is_speaking and speech_start_time is not None:
+                            logger.info(f"Benutzer hat aufgehört zu sprechen (nach {current_time - speech_start_time:.2f}s)")
                             speech_start_time = None
             except ConnectionClosed:
                 logger.info("Talkdesk WebSocket-Verbindung geschlossen")
@@ -478,12 +510,13 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                 metrics.increment("packets_received")
                 
                 data = json.loads(message_str)
+                current_time = time.time()
                 
                 # Verarbeite Audio-Events
                 if data.get("type") == "audio":
                     b64_audio = data.get("audio_event", {}).get("audio_base_64")
                     if b64_audio:
-                        # Markiere Agent als sprechend
+                        # Markiere Agent als sprechend und aktualisiere Zeitstempel
                         context_manager.agent_started_speaking()
                         
                         # Sende Audio an Talkdesk
