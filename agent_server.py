@@ -1258,46 +1258,76 @@ async def handle_connection(websocket):
 
         # ElevenLabs WebSocket-Verbindung herstellen
         latency_tracker.start("elevenlabs_connection")
+        logger.info("Versuche, Signed URL von ElevenLabs zu erhalten...")
         signed_url = await get_elevenlabs_signed_url()
         if not signed_url:
-            logger.error("Konnte keine Signed URL erhalten. Abbruch.")
+            logger.error("Konnte keine Signed URL erhalten. Abbruch der Verbindung.")
             return
+        logger.info(f"Signed URL erhalten: {signed_url[:70]}...") # Logge nur einen Teil der URL
             
         # Verbesserte WebSocket-Verbindung zu ElevenLabs mit vollständigen Parametern
+        el_ws = None
         try:
+            logger.info(f"Versuche, WebSocket-Verbindung zu ElevenLabs herzustellen: {signed_url[:70]}...")
             el_ws = await websockets.connect(
                 signed_url,
-                ping_interval=20,  # Regelmäßige Ping-Nachrichten senden
-                ping_timeout=10,   # Timeout für Ping-Antworten
-                close_timeout=5    # Timeout für sauberes Schließen
+                ping_interval=20,
+                ping_timeout=10,
+                close_timeout=5
             )
-            # Füge Monitor als Attribut hinzu, damit send_with_confirmation darauf zugreifen kann
-            el_ws._monitor = elevenlabs_monitor
+            el_ws._monitor = elevenlabs_monitor # Monitor vor dem Starten hinzufügen
             await elevenlabs_monitor.start_monitoring(el_ws)
             
             latency_tracker.end("elevenlabs_connection")
-            logger.info("WebSocket-Verbindung zu ElevenLabs hergestellt")
+            logger.info(f"WebSocket-Verbindung zu ElevenLabs erfolgreich hergestellt. Zustand: {el_ws.state}")
         except Exception as e:
-            logger.error(f"Fehler beim Verbinden mit ElevenLabs: {e}", exc_info=True)
+            logger.error(f"Fehler beim Verbinden mit ElevenLabs WebSocket: {e}", exc_info=True)
             metrics.record_error("ElevenLabsConnectionError", str(e))
+            if el_ws and el_ws.open: # Sicherstellen, dass wir nur schließen, wenn offen
+                await el_ws.close()
             return
 
         # Initialisierung senden
         initial_config = build_initial_config()
+        logger.info(f"Sende Initial Config an ElevenLabs: {json.dumps(initial_config)}")
         latency_tracker.start("initial_config_send")
-        await el_ws.send(json.dumps(initial_config))
-        elevenlabs_monitor.record_sent()
-        log_websocket_message("SENT-ELEVENLABS", initial_config)
-        metrics.increment("packets_sent")
-        latency_tracker.end("initial_config_send")
-        
+        try:
+            await el_ws.send(json.dumps(initial_config))
+            elevenlabs_monitor.record_sent()
+            log_websocket_message("SENT-ELEVENLABS", initial_config) # Nutzt bereits JSON-Dumps
+            metrics.increment("packets_sent")
+            latency_tracker.end("initial_config_send")
+            logger.info("Initial Config erfolgreich an ElevenLabs gesendet.")
+        except Exception as e:
+            logger.error(f"Fehler beim Senden der Initial Config an ElevenLabs: {e}", exc_info=True)
+            metrics.record_error("ElevenLabsSendError", str(e))
+            await el_ws.close()
+            return
+            
+        # Versuche, eine erste Antwort von ElevenLabs zu empfangen
+        try:
+            logger.info("Warte auf erste Nachricht von ElevenLabs nach Initial Config...")
+            first_el_message = await asyncio.wait_for(el_ws.recv(), timeout=5.0)
+            logger.info("Erste Nachricht von ElevenLabs empfangen.")
+            log_websocket_message("RECV-ELEVENLABS (initial)", first_el_message)
+            # Hier könnte eine Überprüfung der ersten Nachricht stattfinden, z.B. auf conversation_initiation_metadata
+            # Fürs Erste loggen wir sie nur.
+        except asyncio.TimeoutError:
+            logger.warning("Timeout beim Warten auf die erste Nachricht von ElevenLabs nach Initial Config.")
+            # Wir versuchen trotzdem weiterzumachen, vielleicht ist keine sofortige Antwort zwingend.
+        except Exception as e:
+            logger.error(f"Fehler beim Empfangen der ersten Nachricht von ElevenLabs: {e}", exc_info=True)
+            metrics.record_error("ElevenLabsRecvError", str(e))
+            await el_ws.close()
+            return
+
         # Kontext-Manager initialisieren
         context_manager = ContextManager()
-        latency_tracker.start("context_creation")
-        await context_manager.start_new_context(el_ws) # Sendet keine Nachricht mehr
-        latency_tracker.end("context_creation")
+        # start_new_context sendet keine Nachricht mehr, nur Logging und ID-Generierung
+        await context_manager.start_new_context(el_ws) 
 
         # TASKS STARTEN
+        logger.info("Starte Streaming-Tasks...")
         task1 = asyncio.create_task(stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager))
         task2 = asyncio.create_task(stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_manager))
         task3 = asyncio.create_task(metrics.log_metrics())
