@@ -913,10 +913,21 @@ def sanitize_log(message, sensitive_fields=["xi-api-key", "api_key", "password"]
 # BUILD CONFIG FÜR ELEVENLABS
 def build_initial_config():
     config = {"type": "conversation_initiation_client_data"}
+    agent_override = {}
+    
     if POC_PROMPT:
-        config["conversation_config_override"] = {"agent": {"prompt": {"prompt": POC_PROMPT}}}
-    if POC_FIRST_MESSAGE:
-        config.setdefault("conversation_config_override", {}).setdefault("agent", {})["first_message"] = POC_FIRST_MESSAGE
+        agent_override["prompt"] = {"prompt": POC_PROMPT}
+        # Wenn ein Prompt-Override vorhanden ist und keine explizite POC_FIRST_MESSAGE,
+        # müssen wir "" senden, um die Dashboard-First-Message zu nutzen, gemäß Doku.
+        if not POC_FIRST_MESSAGE:
+            agent_override["first_message"] = "" 
+            
+    if POC_FIRST_MESSAGE: # Diese überschreibt das "" von oben, falls POC_FIRST_MESSAGE explizit gesetzt ist
+        agent_override["first_message"] = POC_FIRST_MESSAGE
+        
+    if agent_override: # Nur wenn es tatsächlich Overrides gibt, den Block hinzufügen
+        config["conversation_config_override"] = {"agent": agent_override}
+        
     return config
 
 # SIGNED URL LADEN
