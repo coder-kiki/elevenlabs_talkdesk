@@ -160,8 +160,9 @@ POC_FIRST_MESSAGE = os.environ.get("ELEVENLABS_POC_FIRST_MESSAGE")
 WEBSOCKET_HOST = os.environ.get("WEBSOCKET_HOST", "0.0.0.0")
 WEBSOCKET_PORT = int(os.environ.get("WEBSOCKET_PORT", "8080"))
 VAD_ENERGY_THRESHOLD = float(os.environ.get("VAD_ENERGY_THRESHOLD", "0.0008"))  # Drastisch reduzierter Schwellenwert basierend auf tatsächlichen Energiewerten
-VAD_SPEECH_DURATION_THRESHOLD = float(os.environ.get("VAD_SPEECH_DURATION_THRESHOLD", "0.1"))  # Kürzere Erkennungszeit
+VAD_SPEECH_DURATION_THRESHOLD = float(os.environ.get("VAD_SPEECH_DURATION_THRESHOLD", "0.25"))  # Erhöht auf 0.25s gemäß Benutzerwunsch
 VAD_SILENCE_DURATION_THRESHOLD = float(os.environ.get("VAD_SILENCE_DURATION_THRESHOLD", "0.5"))
+VAD_GRACE_PERIOD_AFTER_AGENT_STARTS = float(os.environ.get("VAD_GRACE_PERIOD_AFTER_AGENT_STARTS", "1.0")) # NEU: 1 Sekunde Schonfrist
 LOG_INTERVAL = int(os.environ.get("LOG_INTERVAL", "300"))  # 5 Minuten
 DEBUG_LOGGING = os.environ.get("DEBUG_LOGGING", "true").lower() == "true"  # Detaillierte Logs aktivieren
 USE_SPEECH_RECOGNITION = os.environ.get("USE_SPEECH_RECOGNITION", "true").lower() == "true"  # Spracherkennung für bessere Unterbrechungserkennung
@@ -522,6 +523,7 @@ class ContextManager:
         self.last_audio_time = 0
         self.audio_timeout = 0.5  # Wenn 0.5s kein Audio, dann spricht der Agent nicht mehr
         self.user_has_interrupted = False # NEUES FLAG
+        self.agent_just_started_speaking_timestamp = None # NEU für VAD Schonfrist
         
     @property
     def agent_speaking_duration(self):
@@ -584,6 +586,7 @@ class ContextManager:
         
         if not self.is_agent_speaking: # Nur loggen und Startzeit setzen, wenn er vorher nicht sprach
             self.agent_speaking_start_time = current_time
+            self.agent_just_started_speaking_timestamp = current_time # NEU: Zeitstempel für Schonfrist setzen
             logger.info("Agent hat begonnen zu sprechen")
 
         self.is_agent_speaking = True # Immer auf True setzen, wenn Audio kommt (es sei denn, user_has_interrupted)
@@ -1096,9 +1099,16 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                                 f"AgentInPause: {context_manager.agent_in_pause}, "
                                                 f"LastUserText: '{interruption_classifier.last_speech_text}'")
                                     
-                                    # Direkter Stopp der Agenten-Audioausgabe clientseitig
-                                    logger.info("Benutzeraktivität während Agent spricht: Stoppe Agenten-Audio clientseitig.")
-                                    context_manager.stop_agent_audio_output_immediately()
+                                    # VAD Schonfrist prüfen
+                                    in_grace_period = False
+                                    if context_manager.agent_just_started_speaking_timestamp:
+                                        if current_time - context_manager.agent_just_started_speaking_timestamp < VAD_GRACE_PERIOD_AFTER_AGENT_STARTS:
+                                            in_grace_period = True
+                                            logger.info(f"Benutzeraktivität während Agent spricht, aber innerhalb der VAD-Schonfrist ({VAD_GRACE_PERIOD_AFTER_AGENT_STARTS}s). Keine Unterbrechung ausgelöst.")
+                                    
+                                    if not in_grace_period:
+                                        logger.info("Benutzeraktivität während Agent spricht (außerhalb Schonfrist): Stoppe Agenten-Audio clientseitig.")
+                                        context_manager.stop_agent_audio_output_immediately()
                                     # Wir senden keine expliziten interruption/abort Befehle mehr.
                                     # Die weitere Handhabung (neue Agentenantwort) wird durch das Senden
                                     # des user_audio_chunk an ElevenLabs und deren serverseitige Logik getriggert.
@@ -1234,6 +1244,9 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                     logger.debug(f"Bestätigung erhalten: {data.get('message_id', 'unknown')}")
                 
                 # Verarbeite andere Nachrichtentypen
+                elif data.get("type") == "conversation_initiation_metadata":
+                    logger.info("RECV-ELEVENLABS: 'conversation_initiation_metadata' empfangen und verarbeitet (geloggt).")
+                    # Keine weitere Aktion hier nötig, Audio-Events werden separat behandelt.
                 else:
                     logger.debug(f"Unbekannter Nachrichtentyp von ElevenLabs: {data.get('type', 'unknown')}")
                     
@@ -1348,33 +1361,12 @@ async def handle_connection(websocket):
         # start_new_context sendet die testweise "create context" Nachricht fire-and-forget
         await context_manager.start_new_context(el_ws) 
 
-        # NEU: Explizit auf die erste Antwort von ElevenLabs warten (erwartet: conversation_initiation_metadata)
-        # Dies gibt dem Server Zeit zu reagieren, bevor die Haupt-Streaming-Schleifen beginnen.
-        try:
-            logger.info("Warte auf erste Antwort von ElevenLabs nach Initial Config und Create Context (max 5s)...")
-            first_server_message_str = await asyncio.wait_for(el_ws.recv(), timeout=5.0)
-            if elevenlabs_monitor:
-                elevenlabs_monitor.record_received() # Manuell aufzeichnen, da es außerhalb der Stream-Schleife ist
-            log_websocket_message("RECV-ELEVENLABS (initial_response)", first_server_message_str)
-            
-            # Optional: Überprüfen, ob es 'conversation_initiation_metadata' ist
-            try:
-                first_server_message_json = json.loads(first_server_message_str)
-                if first_server_message_json.get("type") == "conversation_initiation_metadata":
-                    logger.info("Erfolgreich 'conversation_initiation_metadata' als erste Antwort empfangen.")
-                else:
-                    logger.warning(f"Unerwartete erste Antwort von ElevenLabs: Typ {first_server_message_json.get('type')}")
-            except json.JSONDecodeError:
-                logger.warning("Erste Antwort von ElevenLabs war kein valides JSON.")
-        except asyncio.TimeoutError:
-            logger.warning("Timeout beim Warten auf die erste Antwort von ElevenLabs. Starte Streaming-Tasks trotzdem.")
-        except Exception as e:
-            logger.error(f"Fehler beim Warten/Empfangen der ersten Antwort von ElevenLabs: {e}. Starte Streaming-Tasks trotzdem.")
-            metrics.record_error("ElevenLabsInitialRecvError", str(e))
-            # Nicht abbrechen, versuche trotzdem, die Streams zu starten
+        # Explizites Warten auf die erste Server-Nachricht wurde entfernt.
+        # stream_elevenlabs_to_talkdesk ist nun direkt für alle Nachrichten zuständig.
+        logger.info("Initialisierung abgeschlossen. Starte Streaming-Tasks...")
 
         # TASKS STARTEN
-        logger.info("Starte Streaming-Tasks...")
+        # logger.info("Starte Streaming-Tasks...") # Bereits oben geloggt
         task1 = asyncio.create_task(stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager))
         task2 = asyncio.create_task(stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_manager))
         task3 = asyncio.create_task(metrics.log_metrics())
