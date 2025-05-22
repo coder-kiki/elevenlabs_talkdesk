@@ -529,162 +529,39 @@ class ContextManager:
         return time.time() - self.agent_speaking_start_time
     
     async def start_new_context(self, ws):
-        # Generiere eine neue Kontext-ID
+        # Generiere eine neue Kontext-ID (primär für clientseitiges Logging, falls benötigt)
+        # Wir senden keine explizite "create context" Nachricht mehr an ElevenLabs.
+        # Das Kontextmanagement wird vermutlich serverseitig gehandhabt.
         self.current_context_id = f"context_{uuid.uuid4().hex}"
-        
-        try:
-            # Sende Kontext-Initialisierungsnachricht
-            await ws.send(json.dumps({
-                "type": "context_control",
-                "context_control": {
-                    "action": "create",
-                    "context_id": self.current_context_id
-                }
-            }))
-            
-            metrics.increment("context_switches")
-            logger.info(f"Neuer Kontext erstellt: {self.current_context_id}")
-            return self.current_context_id
-        except Exception as e:
-            logger.error(f"Fehler beim Erstellen eines neuen Kontexts: {e}")
-            metrics.increment("context_control_failures")
-            self.current_context_id = None
-            return None
+        metrics.increment("context_switches") # Zählt weiterhin logische Kontextwechsel clientseitig
+        logger.info(f"Logischer neuer Kontext clientseitig gestartet: {self.current_context_id}. Es wird keine 'create' Nachricht an ElevenLabs gesendet.")
+        return self.current_context_id
     
     async def handle_interruption(self, ws):
-        if self.current_context_id:
-            logger.info(f"Unterbrechung erkannt, stoppe Kontext {self.current_context_id}")
-            old_context_id = self.current_context_id
-            
-            # Markiere Agent sofort als nicht mehr sprechend
-            self.is_agent_speaking = False
-            self.agent_speaking_start_time = None
-            self.agent_in_pause = False
-            
-            try:
-                # Optimierte Reihenfolge für schnellere Unterbrechung mit zuverlässiger Bestätigung:
-                # 1. Sende zuerst das direkte Interruption-Signal (höchste Priorität)
-                interruption_msg = {
-                    "type": "interruption",
-                    "timestamp": time.time()
-                }
-                
-                # Verwende send_with_confirmation mit kurzer Timeout-Zeit für schnelle Reaktion
-                # Das 'interruption'-Signal wird jetzt in send_with_confirmation als fire-and-forget behandelt
-                # und gibt immer True zurück, wenn das Senden selbst erfolgreich war.
-                # Wir müssen hier nicht mehr auf eine separate Bestätigung warten.
-                await send_with_confirmation(
-                    ws, 
-                    interruption_msg 
-                    # expect_confirmation ist standardmäßig True, aber für type="interruption" wird es intern auf False gesetzt (bzw. es wird nicht gewartet)
-                )
-                # Das Logging "Direktes Interruption-Signal gesendet" erfolgt jetzt innerhalb von send_with_confirmation.
-                                
-                # 2. Sende sofort das Abort-Signal für den aktuellen Kontext.
-                # Hier wollen wir auf eine Bestätigung warten, da es wichtig ist zu wissen, ob der Kontext wirklich abgebrochen wurde.
-                abort_msg = {
-                    "type": "context_control",
-                    "context_control": {
-                        "action": "abort",
-                        "context_id": old_context_id
-                    }
-                }
-                
-                sent_abort = await send_with_confirmation(
-                    ws, 
-                    abort_msg,
-                    timeout=0.8,  # Etwas längerer Timeout für Kontext-Operationen
-                    max_retries=3
-                )
-                
-                if sent_abort:
-                    logger.info(f"Kontext-Abort-Signal für {old_context_id} gesendet und bestätigt")
-                else:
-                    logger.warning(f"Keine Bestätigung für Kontext-Abort-Signal erhalten")
-                
-                # 3. Erstelle einen neuen Kontext für die nächste Antwort
-                # Verzögere die Erstellung des neuen Kontexts um 100ms, um sicherzustellen, dass der alte Kontext abgebrochen wurde
-                await asyncio.sleep(0.1)
-                new_context_id = await self.start_new_context(ws)
-                logger.info(f"Neuer Kontext {new_context_id} erstellt nach Abort des alten Kontexts")
-                
-                metrics.increment("interruptions_detected")
-            except Exception as e:
-                logger.error(f"Fehler bei Interruption-Signalen: {e}")
-                metrics.increment("context_control_failures")
-                metrics.record_error("InterruptionError", str(e))
-                
-                # Fallback: Versuche trotzdem einen neuen Kontext zu erstellen
-                try:
-                    await self.start_new_context(ws)
-                except Exception as e2:
-                    logger.error(f"Auch Fallback-Kontext-Erstellung fehlgeschlagen: {e2}")
-    
+        # Diese Methode wird vorerst nicht mehr direkt aufgerufen, um Signale zu senden.
+        # Das Stoppen des Agenten-Audios erfolgt nun direkter.
+        # Wir behalten die Methode vorerst, falls wir sie für andere Zwecke reaktivieren.
+        logger.info(f"handle_interruption aufgerufen für Kontext {self.current_context_id} - AKTION AUSGESETZT")
+        # Markiere Agent sofort als nicht mehr sprechend
+        self.stop_agent_audio_output_immediately() # Neue, direktere Methode
+        metrics.increment("interruptions_detected")
+
     async def handle_backchanneling(self, ws):
-        if self.is_agent_speaking and self.current_context_id and not self.agent_in_pause:
-            logger.info(f"Backchanneling erkannt, pausiere Kontext {self.current_context_id}")
-            
-            try:
-                # Sende Pausensignal mit Bestätigung
-                pause_msg = {
-                    "type": "context_control",
-                    "context_control": {
-                        "action": "pause",
-                        "context_id": self.current_context_id
-                    }
-                }
-                
-                sent_pause = await send_with_confirmation(
-                    ws, 
-                    pause_msg,
-                    timeout=0.8,
-                    max_retries=2
-                )
-                
-                if sent_pause:
-                    logger.info(f"Pause-Signal für Kontext {self.current_context_id} gesendet und bestätigt")
-                    self.agent_in_pause = True
-                    metrics.increment("backchanneling_detected")
-                else:
-                    logger.warning(f"Keine Bestätigung für Pause-Signal erhalten")
-                    # Trotzdem als pausiert markieren, um konsistenten Zustand zu gewährleisten
-                    self.agent_in_pause = True
-                
-                # Kurze Pause einlegen
-                await asyncio.sleep(0.5)
-                
-                # Fortsetzen, wenn kein Abbruch erfolgt ist
-                if self.agent_in_pause and self.is_agent_speaking:
-                    logger.info(f"Setze Kontext fort: {self.current_context_id}")
-                    
-                    resume_msg = {
-                        "type": "context_control",
-                        "context_control": {
-                            "action": "resume",
-                            "context_id": self.current_context_id
-                        }
-                    }
-                    
-                    sent_resume = await send_with_confirmation(
-                        ws, 
-                        resume_msg,
-                        timeout=0.8,
-                        max_retries=2
-                    )
-                    
-                    if sent_resume:
-                        logger.info(f"Resume-Signal für Kontext {self.current_context_id} gesendet und bestätigt")
-                        self.agent_in_pause = False
-                    else:
-                        logger.warning(f"Keine Bestätigung für Resume-Signal erhalten")
-                        # Trotzdem Pause-Status zurücksetzen, um weiteres Sprechen zu ermöglichen
-                        self.agent_in_pause = False
-            except Exception as e:
-                logger.error(f"Fehler bei Kontext-Steuerung (pause/resume): {e}")
-                metrics.increment("context_control_failures")
-                # Bei Fehlern setzen wir den Pause-Status zurück
-                self.agent_in_pause = False
-    
+        # Diese Methode wird vorerst nicht mehr direkt aufgerufen.
+        logger.info(f"handle_backchanneling aufgerufen für Kontext {self.current_context_id} - AKTION AUSGESETZT")
+        # Hier könnte später Logik für serverseitig gemeldetes Backchanneling stehen.
+
+    def stop_agent_audio_output_immediately(self):
+        """Stoppt sofort die Annahme, dass der Agent spricht, und setzt relevante Flags."""
+        if self.is_agent_speaking:
+            logger.info(f"Clientseitiges Stoppen der Agenten-Audioausgabe angefordert (Dauer: {self.agent_speaking_duration:.2f}s). Kontext: {self.current_context_id}")
+        self.is_agent_speaking = False
+        self.agent_speaking_start_time = None
+        self.agent_in_pause = False
+        # HINWEIS: Das tatsächliche Leeren der Audio-Queue zum TalkDesk-Client müsste hier
+        # oder durch ein Signal an stream_elevenlabs_to_talkdesk erfolgen.
+        # Vorerst setzen wir nur die Flags, was das Senden neuer Agent-Audio-Chunks verhindert.
+
     def agent_started_speaking(self):
         current_time = time.time()
         self.last_audio_time = current_time
@@ -886,7 +763,7 @@ def log_websocket_message(direction, message, is_binary=False):
             if isinstance(message, bytes):
                 try:
                     # Versuche, die ersten paar Bytes als Text zu interpretieren, falls es doch Text war
-                    preview = message_str[:200]
+                    preview = message_str[:200] # message_str ist hier bereits definiert
                     logger.info(f"{log_prefix} NON-JSON TEXT (from bytes): {preview}...")
                 except UnicodeDecodeError:
                     logger.info(f"{log_prefix} NON-JSON BINARY (preview): {message[:50].hex()}...")
@@ -894,11 +771,11 @@ def log_websocket_message(direction, message, is_binary=False):
                 logger.info(f"{log_prefix} NON-JSON TEXT: {message_str[:200]}...")
         except Exception as e:
             logger.error(f"{log_prefix} Error in log_websocket_message: {e}", exc_info=True)
-            # Fallback: Logge den rohen String, wenn möglich
+            # Fallback: Logge den rohen String oder Byte-Preview, wenn möglich
             if isinstance(message, str):
-                logger.info(f"{log_prefix} RAW TEXT (after error): {message[:200]}...")
+                logger.info(f"{log_prefix} RAW TEXT (after error in logging): {message[:200]}...")
             elif isinstance(message, bytes):
-                 logger.info(f"{log_prefix} RAW BYTES (after error, preview): {message[:50].hex()}...")
+                 logger.info(f"{log_prefix} RAW BYTES (after error in logging, preview): {message[:50].hex()}...")
 
     else:
         logger.info(f"{log_prefix} UNKNOWN TYPE: {type(message)} - {str(message)[:100]}...")
@@ -1176,7 +1053,7 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                         logger.error(f"Fehler bei Energieberechnung für Unterbrechungs-Check: {e}")
                                         current_chunk_energy = 0.001  # Fallback
                                     
-                                    # NEUES LOGGING (Punkt 1)
+                                    # NEUES LOGGING (Punkt 1) - Bleibt zur Beobachtung
                                     logger.info(f"[INTERRUPTION_CHECK] User speech detected while agent speaking. "
                                                 f"UserSpeechDuration: {speech_duration:.2f}s, "
                                                 f"ChunkEnergy: {current_chunk_energy:.6f}, "
@@ -1184,24 +1061,12 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                                 f"AgentInPause: {context_manager.agent_in_pause}, "
                                                 f"LastUserText: '{interruption_classifier.last_speech_text}'")
                                     
-                                    interruption_type = interruption_classifier.classify_interruption(
-                                        duration=speech_duration,
-                                        energy=current_chunk_energy, # Verwende die bereits berechnete Energie
-                                        agent_speaking_duration=context_manager.agent_speaking_duration,
-                                        agent_in_pause=context_manager.agent_in_pause
-                                    )
-                                    
-                                    # NEUES LOGGING (Punkt 2)
-                                    logger.info(f"[INTERRUPTION_CLASSIFIED] Type: {interruption_type}")
-                                    
-                                    if interruption_type == "INTERRUPTION":
-                                        # NEUES LOGGING (Punkt 3)
-                                        logger.info(f"[INTERRUPTION_HANDLER_CALL] Calling handle_interruption for context {context_manager.current_context_id}")
-                                        await context_manager.handle_interruption(el_ws)
-                                    elif interruption_type == "BACKCHANNELING":
-                                        # NEUES LOGGING (Punkt 3)
-                                        logger.info(f"[BACKCHANNELING_HANDLER_CALL] Calling handle_backchanneling for context {context_manager.current_context_id}")
-                                        await context_manager.handle_backchanneling(el_ws)
+                                    # Direkter Stopp der Agenten-Audioausgabe clientseitig
+                                    logger.info("Benutzeraktivität während Agent spricht: Stoppe Agenten-Audio clientseitig.")
+                                    context_manager.stop_agent_audio_output_immediately()
+                                    # Wir senden keine expliziten interruption/abort Befehle mehr.
+                                    # Die weitere Handhabung (neue Agentenantwort) wird durch das Senden
+                                    # des user_audio_chunk an ElevenLabs und deren serverseitige Logik getriggert.
                             
                             # Füge Audio zum Spracherkennungspuffer hinzu
                             speech_recognizer.add_audio(payload)
@@ -1219,21 +1084,11 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                         speech_duration = current_time - speech_start_time
                                         energy = vad.calculate_energy(payload)
                                         
-                                        # Klassifiziere die Unterbrechung basierend auf dem erkannten Text
-                                        interruption_type = interruption_classifier.classify_interruption(
-                                            duration=speech_duration,
-                                            energy=energy,
-                                            agent_speaking_duration=context_manager.agent_speaking_duration,
-                                            agent_in_pause=context_manager.agent_in_pause
-                                        )
-                                        
-                                        if interruption_type == "INTERRUPTION":
-                                            logger.info(f"Textbasierte Unterbrechung erkannt: '{recognized_text}'")
-                                            await context_manager.handle_interruption(el_ws)
-                                        elif interruption_type == "BACKCHANNELING":
-                                            logger.info(f"Textbasiertes Backchanneling erkannt: '{recognized_text}'")
-                                            await context_manager.handle_backchanneling(el_ws)
-                            
+                                        # Die Klassifizierung und das Senden von Steuerbefehlen entfällt hier.
+                                        # Wir verlassen uns darauf, dass das Senden des User-Audios an ElevenLabs
+                                        # die serverseitige Logik für eine neue Antwort oder Korrektur auslöst.
+                                        logger.info(f"Text erkannt ('{recognized_text}') während Agent (vermutlich) schon gestoppt wurde (clientseitig). Sende Audio an ElevenLabs.")
+
                             # Audio an ElevenLabs senden
                             audio_msg = {"user_audio_chunk": payload}
                             await el_ws.send(json.dumps(audio_msg))
@@ -1312,24 +1167,28 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                         # Ende der Latenz-Messung
                         latency_tracker.end("audio_forward")
                 
-                # Verarbeite Kontext-Events
+                elif data.get("type") == "agent_response_correction":
+                    correction_event = data.get("agent_response_correction_event", {})
+                    original_response = correction_event.get("original_agent_response")
+                    corrected_response = correction_event.get("corrected_agent_response")
+                    logger.info(f"Agentenantwort-Korrektur erhalten. Original: '{original_response}', Korrigiert: '{corrected_response}'")
+                    # Stoppe die aktuelle Audiowiedergabe des Agenten, da eine Korrektur bedeutet, dass eine Unterbrechung stattgefunden hat.
+                    # Dies ist eine zusätzliche Sicherheit, falls das clientseitige Stoppen in stream_talkdesk_to_elevenlabs nicht ausreicht
+                    # oder falls ElevenLabs die Unterbrechung rein serverseitig erkennt und dieses Event sendet.
+                    context_manager.stop_agent_audio_output_immediately()
+                    # Hier müsste idealerweise die Audio-Queue für TalkDesk geleert werden.
+                    # TODO: Implementiere Mechanismus zum Leeren der TalkDesk-Audio-Queue.
+
+                # Verarbeite Kontext-Events (obwohl wir sie nicht mehr aktiv senden, loggen wir, falls sie kommen)
                 elif data.get("type") == "context_control_response":
                     control_response = data.get("context_control_response", {})
                     action = control_response.get("action")
                     success = control_response.get("success", False)
                     message_id = control_response.get("message_id", "unknown")
                     
+                    logger.info(f"Unerwartete Context-Control-Response empfangen: Aktion={action}, Erfolg={success}, ID={message_id}")
                     if action == "abort" and success:
-                        logger.info(f"Kontext erfolgreich abgebrochen (message_id: {message_id})")
-                        context_manager.agent_stopped_speaking()
-                    elif action == "pause" and success:
-                        logger.info(f"Kontext erfolgreich pausiert (message_id: {message_id})")
-                    elif action == "resume" and success:
-                        logger.info(f"Kontext erfolgreich fortgesetzt (message_id: {message_id})")
-                    elif action == "create" and success:
-                        logger.info(f"Kontext erfolgreich erstellt (message_id: {message_id})")
-                    else:
-                        logger.info(f"Kontext-Steuerung: Aktion={action}, Erfolg={success}, ID={message_id}")
+                        context_manager.agent_stopped_speaking() # Sicherstellen, dass der Status korrekt ist
                 
                 # Verarbeite End-Events
                 elif data.get("type") == "end":
@@ -1435,7 +1294,7 @@ async def handle_connection(websocket):
         # Kontext-Manager initialisieren
         context_manager = ContextManager()
         latency_tracker.start("context_creation")
-        await context_manager.start_new_context(el_ws)
+        await context_manager.start_new_context(el_ws) # Sendet keine Nachricht mehr
         latency_tracker.end("context_creation")
 
         # TASKS STARTEN
@@ -1498,3 +1357,27 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Unbehandelter Fehler: {e}", exc_info=True)
         metrics.record_error("UnhandledError", str(e))
+
+</final_file_content>
+
+IMPORTANT: For any future changes to this file, use the final_file_content shown above as your reference. This content reflects the current state of the file, including any auto-formatting (e.g., if you used single quotes but the formatter converted them to double quotes). Always base your SEARCH/REPLACE operations on this final version to ensure accuracy.<environment_details>
+# VSCode Visible Files
+../../../../extension-output-etmoffat.pip-packages-#1-Pip package updater
+agent_server.py
+
+# VSCode Open Tabs
+Dockerfile
+Elevenlabs_Docs
+API-Reference-Elevenlabs
+agent_server.py
+requirements.txt
+
+# Current Time
+22.5.2025, 0:25:04 PM (Europe/Athens, UTC+3:00)
+
+# Context Window Usage
+565.404 / 1.048,576K tokens used (54%)
+
+# Current Mode
+ACT MODE
+</environment_details>
