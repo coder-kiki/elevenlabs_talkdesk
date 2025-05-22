@@ -521,6 +521,7 @@ class ContextManager:
         self.agent_in_pause = False
         self.last_audio_time = 0
         self.audio_timeout = 0.5  # Wenn 0.5s kein Audio, dann spricht der Agent nicht mehr
+        self.user_has_interrupted = False # NEUES FLAG
         
     @property
     def agent_speaking_duration(self):
@@ -575,16 +576,19 @@ class ContextManager:
         # HINWEIS: Das tatsächliche Leeren der Audio-Queue zum TalkDesk-Client müsste hier
         # oder durch ein Signal an stream_elevenlabs_to_talkdesk erfolgen.
         # Vorerst setzen wir nur die Flags, was das Senden neuer Agent-Audio-Chunks verhindert.
+        self.user_has_interrupted = True # Flag setzen bei Unterbrechung
 
     def agent_started_speaking(self):
         current_time = time.time()
         self.last_audio_time = current_time
         
-        if not self.is_agent_speaking:
-            self.is_agent_speaking = True
+        if not self.is_agent_speaking: # Nur loggen und Startzeit setzen, wenn er vorher nicht sprach
             self.agent_speaking_start_time = current_time
-            self.agent_in_pause = False
             logger.info("Agent hat begonnen zu sprechen")
+
+        self.is_agent_speaking = True # Immer auf True setzen, wenn Audio kommt (es sei denn, user_has_interrupted)
+        self.agent_in_pause = False
+        self.user_has_interrupted = False # Zurücksetzen, da der Agent (neu) spricht
     
     def agent_stopped_speaking(self):
         if self.is_agent_speaking:
@@ -1175,10 +1179,14 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                 if data.get("type") == "audio":
                     b64_audio = data.get("audio_event", {}).get("audio_base_64")
                     if b64_audio:
-                        # Nur Audio senden und Agent als sprechend markieren,
-                        # wenn der ContextManager dies aktuell erlaubt.
-                        if context_manager.is_agent_speaking:
-                            context_manager.agent_started_speaking() # Aktualisiert last_audio_time etc.
+                        # Prüfe, ob eine aktive Benutzerunterbrechung vorliegt
+                        if context_manager.user_has_interrupted:
+                            logger.info(f"RECV-ELEVENLABS: Audio-Event empfangen, aber Agent wurde gerade vom Benutzer unterbrochen (user_has_interrupted=True). Verwerfe {len(b64_audio)} Bytes Audio.")
+                            # Das Flag user_has_interrupted bleibt True, bis der Agent legitim neu mit einer Antwort beginnt
+                            # oder die VAD des Benutzers wieder Stille meldet und der Agent dann antwortet.
+                        else:
+                            # Keine aktive Unterbrechung: Agent darf sprechen (entweder erster Start oder Fortsetzung).
+                            context_manager.agent_started_speaking() # Setzt is_agent_speaking=True und user_has_interrupted=False
                             
                             latency_tracker.start("audio_forward")
                             talkdesk_msg = {
@@ -1192,11 +1200,6 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                             log_websocket_message("SENT-TALKDESK", talkdesk_msg)
                             metrics.increment("packets_sent")
                             latency_tracker.end("audio_forward")
-                        else:
-                            # Wenn is_agent_speaking False ist (z.B. durch clientseitige Unterbrechung),
-                            # verwerfen wir dieses Audio und loggen es.
-                            logger.info(f"RECV-ELEVENLABS: Audio-Event empfangen, aber Agent soll nicht sprechen (is_agent_speaking=False). Verwerfe {len(b64_audio)} Bytes Audio.")
-                            # Es ist wichtig, hier NICHT agent_started_speaking() aufzurufen.
                 
                 elif data.get("type") == "agent_response_correction":
                     correction_event = data.get("agent_response_correction_event", {})
