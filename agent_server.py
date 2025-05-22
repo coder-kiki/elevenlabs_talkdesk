@@ -17,31 +17,71 @@ import wave
 from websockets.connection import State
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, ConnectionClosedError
 
+# ELEVENLABS SPEECH-TO-TEXT
+async def process_audio_with_elevenlabs_stt(audio_bytes):
+    """Verarbeitet Audio mit der ElevenLabs Speech-to-Text API gemäß offizieller Dokumentation."""
+    try:
+        # ElevenLabs STT API-Endpunkt
+        url = "https://api.elevenlabs.io/v1/speech-to-text"
+        
+        # Bereite die Audiodaten als Datei für multipart/form-data vor
+        files = {
+            'file': ('audio.wav', audio_bytes, 'audio/wav')
+        }
+        
+        # Bereite die Form-Daten vor
+        form_data = {
+            "model_id": "scribe_v1",           # Verwende das Scribe v1 Modell
+            "language_code": "de",             # Deutsch (ISO-639-1 Code)
+            "timestamps_granularity": "word",  # Wort-Level Timestamps
+            "diarize": "false",                # Keine Sprechererkennung nötig für unseren Anwendungsfall
+            "tag_audio_events": "false"        # Keine Audio-Events nötig für unseren Anwendungsfall
+        }
+        
+        headers = {
+            "xi-api-key": ELEVENLABS_API_KEY,
+            # Content-Type wird automatisch von httpx gesetzt
+        }
+        
+        # Sende die Anfrage
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url, 
+                files=files, 
+                data=form_data,  # Verwende data für Form-Felder
+                headers=headers
+            )
+            response.raise_for_status()
+            
+            # Verarbeite die Antwort
+            result = response.json()
+            
+            # Extrahiere den Text aus der Antwort
+            text = result.get("text", "")
+            
+            if text:
+                logger.info(f"ElevenLabs STT erfolgreich: '{text}'")
+                return text
+            else:
+                logger.warning("ElevenLabs STT lieferte keinen Text zurück")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Fehler bei ElevenLabs Speech-to-Text: {e}")
+        return None
+
 # SPEECH RECOGNIZER
 class SpeechRecognizer:
     def __init__(self):
-        self.recognizer = sr.Recognizer() if SPEECH_RECOGNITION_AVAILABLE else None
         self.audio_buffer = bytearray()
         self.last_recognition_time = 0
-        self.recognition_interval = 0.5  # Reduziert von 1.0s für schnellere Erkennung
-        self.min_buffer_size = 6000  # Reduziert von 8000 für schnellere Erkennung (ca. 0.75 Sekunden Audio)
+        self.recognition_interval = 0.5  # Reduziert für schnellere Erkennung
+        self.min_buffer_size = 6000  # Reduziert für schnellere Erkennung (ca. 0.75 Sekunden Audio)
         self.max_buffer_size = 32000  # Maximale Puffergröße (ca. 4 Sekunden Audio)
         self.is_processing = False
-        self.language = "de-DE"  # Deutsch als Standardsprache
-        
-        # Optimierung der Spracherkennung für schnellere Reaktion
-        if self.recognizer:
-            # Erhöhe die Empfindlichkeit der Spracherkennung
-            self.recognizer.energy_threshold = 300  # Standardwert ist 300
-            self.recognizer.dynamic_energy_threshold = True
-            self.recognizer.dynamic_energy_adjustment_damping = 0.15
-            self.recognizer.dynamic_energy_ratio = 1.5
         
     def add_audio(self, audio_base64):
         """Fügt Audio zum Puffer hinzu."""
-        if not SPEECH_RECOGNITION_AVAILABLE or not USE_SPEECH_RECOGNITION:
-            return
-            
         try:
             # Base64 dekodieren und zum Puffer hinzufügen
             audio_bytes = base64.b64decode(audio_base64)
@@ -56,9 +96,6 @@ class SpeechRecognizer:
     
     async def try_recognize(self, current_time):
         """Versucht, Sprache im Puffer zu erkennen, wenn genug Zeit vergangen ist."""
-        if not SPEECH_RECOGNITION_AVAILABLE or not USE_SPEECH_RECOGNITION:
-            return None
-            
         if self.is_processing:
             return None
             
@@ -75,53 +112,28 @@ class SpeechRecognizer:
             self.audio_buffer.clear()
             
             try:
-                # Führe die Spracherkennung in einem separaten Thread aus
-                loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(None, self._recognize_audio, current_buffer)
+                # Konvertiere μ-law 8kHz zu WAV für die Spracherkennung
+                with io.BytesIO() as wav_io:
+                    with wave.open(wav_io, 'wb') as wav_file:
+                        wav_file.setnchannels(1)
+                        wav_file.setsampwidth(1)  # 8-bit
+                        wav_file.setframerate(8000)
+                        wav_file.writeframes(current_buffer)
+                    
+                    wav_io.seek(0)
+                    wav_data = wav_io.read()
                 
-                if result:
-                    logger.info(f"Spracherkennung erfolgreich: '{result}'")
-                    return result
+                # Verwende ElevenLabs STT
+                result = await process_audio_with_elevenlabs_stt(wav_data)
+                return result
             except Exception as e:
                 logger.error(f"Fehler bei der Spracherkennung: {e}")
             finally:
                 self.is_processing = False
                 
         return None
-    
-    def _recognize_audio(self, audio_bytes):
-        """Führt die eigentliche Spracherkennung durch."""
-        if not self.recognizer:
-            return None
-            
-        try:
-            # Konvertiere μ-law 8kHz zu WAV für die Spracherkennung
-            with io.BytesIO() as wav_io:
-                with wave.open(wav_io, 'wb') as wav_file:
-                    wav_file.setnchannels(1)
-                    wav_file.setsampwidth(1)  # 8-bit
-                    wav_file.setframerate(8000)
-                    wav_file.writeframes(audio_bytes)
-                
-                wav_io.seek(0)
-                with sr.AudioFile(wav_io) as source:
-                    audio_data = self.recognizer.record(source)
-                    
-                    # Versuche die Spracherkennung
-                    try:
-                        # Verwende Google's Spracherkennung (erfordert Internetverbindung)
-                        text = self.recognizer.recognize_google(audio_data, language=self.language)
-                        return text
-                    except sr.UnknownValueError:
-                        logger.debug("Spracherkennung konnte Audio nicht verstehen")
-                    except sr.RequestError as e:
-                        logger.error(f"Fehler bei der Google Spracherkennung: {e}")
-        except Exception as e:
-            logger.error(f"Fehler bei der Audio-Konvertierung: {e}")
-            
-        return None
 
-SCRIPT_VERSION = "5.6 - Enhanced Barge-in with Optimized Interruption Detection"
+SCRIPT_VERSION = "5.7 - Enhanced Barge-in with ElevenLabs STT and Optimized Interruption Detection"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
@@ -309,7 +321,7 @@ class SimpleVAD:
         self.energy_log_interval = 1.0  # Energielevel jede Sekunde loggen
         
         # Zusätzliche Parameter für verbesserte Barge-in-Erkennung
-        self.agent_speaking_sensitivity_factor = 0.9  # Erhöhte Empfindlichkeit während Agent spricht
+        self.agent_speaking_sensitivity_factor = 0.8  # Noch höhere Empfindlichkeit während Agent spricht (von 0.9 reduziert)
         self.energy_history = []  # Speichert Energiewerte für Trend-Analyse
         self.energy_history_max_size = 10  # Anzahl der zu speichernden Energiewerte
         
@@ -563,6 +575,8 @@ class ContextManager:
                 logger.info(f"Kontext-Abort-Signal für {old_context_id} gesendet")
                 
                 # 3. Erstelle einen neuen Kontext für die nächste Antwort
+                # Verzögere die Erstellung des neuen Kontexts um 100ms, um sicherzustellen, dass der alte Kontext abgebrochen wurde
+                await asyncio.sleep(0.1)
                 new_context_id = await self.start_new_context(ws)
                 logger.info(f"Neuer Kontext {new_context_id} erstellt nach Abort des alten Kontexts")
                 
@@ -950,25 +964,8 @@ async def handle_connection(websocket):
             logger.error("Konnte keine Signed URL erhalten. Abbruch.")
             return
             
-        # Direkte WebSocket-Verbindung ohne Wrapper
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = True
-        ssl_context.verify_mode = ssl.CERT_REQUIRED
-        
-        # Verbesserte WebSocket-Verbindung mit angepassten Headers
-        additional_headers = {
-            "Connection": "Upgrade",
-            "Upgrade": "websocket",
-            "Sec-WebSocket-Version": "13"
-        }
-        
-        el_ws = await websockets.connect(
-            signed_url, 
-            ssl=ssl_context if signed_url.startswith("wss://") else None,
-            additional_headers=additional_headers,  # Korrekte Parameter-Bezeichnung für websockets 15.0.1
-            ping_interval=20,  # Regelmäßige Ping-Nachrichten senden
-            ping_timeout=60    # Längerer Timeout für Ping-Antworten
-        )
+        # Vereinfachte WebSocket-Verbindung zu ElevenLabs
+        el_ws = await websockets.connect(signed_url)
         logger.info("WebSocket-Verbindung hergestellt")
 
         # Initialisierung senden
