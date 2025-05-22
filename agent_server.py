@@ -729,15 +729,18 @@ def log_websocket_message(direction, message, is_binary=False):
 
     if is_binary:
         logger.info(f"{log_prefix} BINARY DATA: {len(message)} bytes")
-    elif isinstance(message, (str, bytes)):
+    elif isinstance(message, (str, bytes, dict)): # dict hinzugefügt
         try:
-            # Wenn es Bytes sind, zuerst zu String dekodieren
-            if isinstance(message, bytes):
+            if isinstance(message, dict):
+                # Wenn die Nachricht bereits ein Dictionary ist (z.B. bei SENT-ELEVENLABS)
+                parsed_json = message 
+            elif isinstance(message, bytes):
+                # Wenn es Bytes sind, zuerst zu String dekodieren
                 message_str = message.decode('utf-8')
-            else:
+                parsed_json = json.loads(message_str)
+            else: # Es ist ein String
                 message_str = message
-
-            parsed_json = json.loads(message_str)
+                parsed_json = json.loads(message_str)
             
             # Sensible Daten maskieren und Audio kürzen
             if isinstance(parsed_json, dict):
@@ -760,15 +763,18 @@ def log_websocket_message(direction, message, is_binary=False):
         except json.JSONDecodeError:
             # Wenn es kein valides JSON ist, logge es als Text
             # (oder als Hinweis, wenn es Bytes waren, die nicht UTF-8 sind)
-            if isinstance(message, bytes):
+            # Dieser Block wird seltener erreicht, wenn message ein Dict ist, da json.loads nicht aufgerufen wird.
+            if isinstance(message, bytes): # Gilt nur, wenn message ursprünglich Bytes war
                 try:
-                    # Versuche, die ersten paar Bytes als Text zu interpretieren, falls es doch Text war
-                    preview = message_str[:200] # message_str ist hier bereits definiert
+                    # message_str ist hier definiert, wenn message Bytes war und dekodiert wurde
+                    preview = message_str[:200] 
                     logger.info(f"{log_prefix} NON-JSON TEXT (from bytes): {preview}...")
                 except UnicodeDecodeError:
                     logger.info(f"{log_prefix} NON-JSON BINARY (preview): {message[:50].hex()}...")
-            else: # Es war bereits ein String
+            elif isinstance(message, str): # Gilt nur, wenn message ursprünglich ein String war
+                 # message_str ist hier definiert, wenn message ein String war
                 logger.info(f"{log_prefix} NON-JSON TEXT: {message_str[:200]}...")
+            # Wenn message ein Dict war und json.loads nicht aufgerufen wurde, wird dieser Block nicht erreicht.
         except Exception as e:
             logger.error(f"{log_prefix} Error in log_websocket_message: {e}", exc_info=True)
             # Fallback: Logge den rohen String oder Byte-Preview, wenn möglich
@@ -1144,28 +1150,28 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                 if data.get("type") == "audio":
                     b64_audio = data.get("audio_event", {}).get("audio_base_64")
                     if b64_audio:
-                        # Markiere Agent als sprechend und aktualisiere Zeitstempel
-                        context_manager.agent_started_speaking()
-                        
-                        # Messe Latenz für Audio-Übertragung
-                        latency_tracker.start("audio_forward")
-                        
-                        # Erstelle Talkdesk-Audio-Nachricht
-                        talkdesk_msg = {
-                            "event": "media",
-                            "streamSid": stream_sid,
-                            "media": {"payload": b64_audio}
-                        }
-                        
-                        # Sende Audio an Talkdesk
-                        await websocket.send(json.dumps(talkdesk_msg))
-                        if talkdesk_monitor:
-                            talkdesk_monitor.record_sent()
-                        log_websocket_message("SENT-TALKDESK", talkdesk_msg)
-                        metrics.increment("packets_sent")
-                        
-                        # Ende der Latenz-Messung
-                        latency_tracker.end("audio_forward")
+                        # Nur Audio senden und Agent als sprechend markieren,
+                        # wenn der ContextManager dies aktuell erlaubt.
+                        if context_manager.is_agent_speaking:
+                            context_manager.agent_started_speaking() # Aktualisiert last_audio_time etc.
+                            
+                            latency_tracker.start("audio_forward")
+                            talkdesk_msg = {
+                                "event": "media",
+                                "streamSid": stream_sid,
+                                "media": {"payload": b64_audio}
+                            }
+                            await websocket.send(json.dumps(talkdesk_msg))
+                            if talkdesk_monitor:
+                                talkdesk_monitor.record_sent()
+                            log_websocket_message("SENT-TALKDESK", talkdesk_msg)
+                            metrics.increment("packets_sent")
+                            latency_tracker.end("audio_forward")
+                        else:
+                            # Wenn is_agent_speaking False ist (z.B. durch clientseitige Unterbrechung),
+                            # verwerfen wir dieses Audio und loggen es.
+                            logger.info(f"RECV-ELEVENLABS: Audio-Event empfangen, aber Agent soll nicht sprechen (is_agent_speaking=False). Verwerfe {len(b64_audio)} Bytes Audio.")
+                            # Es ist wichtig, hier NICHT agent_started_speaking() aufzurufen.
                 
                 elif data.get("type") == "agent_response_correction":
                     correction_event = data.get("agent_response_correction_event", {})
