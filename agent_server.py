@@ -848,33 +848,60 @@ class LatencyTracker:
 def log_websocket_message(direction, message, is_binary=False):
     """Protokolliert WebSocket-Nachrichten mit Richtung und Zeitstempel."""
     timestamp = time.strftime("%H:%M:%S.%f")[:-3]
+    log_prefix = f"[{timestamp}] {direction}"
+
     if is_binary:
-        logger.debug(f"[{timestamp}] {direction} BINARY: {len(message)} bytes")
-    else:
+        logger.info(f"{log_prefix} BINARY DATA: {len(message)} bytes")
+    elif isinstance(message, (str, bytes)):
         try:
-            if isinstance(message, str):
-                parsed = json.loads(message)
+            # Wenn es Bytes sind, zuerst zu String dekodieren
+            if isinstance(message, bytes):
+                message_str = message.decode('utf-8')
             else:
-                parsed = message
+                message_str = message
+
+            parsed_json = json.loads(message_str)
+            
+            # Sensible Daten maskieren und Audio kürzen
+            if isinstance(parsed_json, dict):
+                # Kopie für die Modifikation erstellen, um das Original nicht zu verändern
+                loggable_json = parsed_json.copy()
+                if "user_audio_chunk" in loggable_json:
+                    loggable_json["user_audio_chunk"] = f"[AUDIO_CHUNK: {len(loggable_json['user_audio_chunk'])} chars]"
+                if loggable_json.get("audio_event", {}).get("audio_base_64"):
+                    loggable_json.setdefault("audio_event", {})["audio_base_64"] = f"[AUDIO_B64: {len(loggable_json['audio_event']['audio_base_64'])} chars]"
+                if "xi-api-key" in loggable_json:
+                    loggable_json["xi-api-key"] = "***REDACTED***"
                 
-            # Sensible Daten maskieren
-            if isinstance(parsed, dict):
-                # Audio-Daten kürzen
-                if "user_audio_chunk" in parsed:
-                    parsed["user_audio_chunk"] = f"[AUDIO: {len(parsed['user_audio_chunk'])} chars]"
-                elif "audio_event" in parsed and "audio_base_64" in parsed["audio_event"]:
-                    parsed["audio_event"]["audio_base_64"] = f"[AUDIO: {len(parsed['audio_event']['audio_base_64'])} chars]"
-                
-                # API-Keys maskieren
-                if "xi-api-key" in parsed:
-                    parsed["xi-api-key"] = "***REDACTED***"
-                
-            logger.debug(f"[{timestamp}] {direction} JSON: {json.dumps(parsed, indent=2)}")
-        except:
-            if isinstance(message, str):
-                logger.debug(f"[{timestamp}] {direction} TEXT: {message[:100]}...")
+                # Logge den Typ und den gesamten Inhalt der geparsten JSON
+                message_type = loggable_json.get("type", "N/A")
+                logger.info(f"{log_prefix} JSON (Type: {message_type}): {json.dumps(loggable_json, indent=2, ensure_ascii=False)}")
             else:
-                logger.debug(f"[{timestamp}] {direction} UNKNOWN: {type(message)}")
+                # Falls es valides JSON ist, aber kein Dict (z.B. eine Liste oder ein Skalar)
+                logger.info(f"{log_prefix} JSON (Non-dict): {json.dumps(parsed_json, indent=2, ensure_ascii=False)}")
+        
+        except json.JSONDecodeError:
+            # Wenn es kein valides JSON ist, logge es als Text
+            # (oder als Hinweis, wenn es Bytes waren, die nicht UTF-8 sind)
+            if isinstance(message, bytes):
+                try:
+                    # Versuche, die ersten paar Bytes als Text zu interpretieren, falls es doch Text war
+                    preview = message_str[:200]
+                    logger.info(f"{log_prefix} NON-JSON TEXT (from bytes): {preview}...")
+                except UnicodeDecodeError:
+                    logger.info(f"{log_prefix} NON-JSON BINARY (preview): {message[:50].hex()}...")
+            else: # Es war bereits ein String
+                logger.info(f"{log_prefix} NON-JSON TEXT: {message_str[:200]}...")
+        except Exception as e:
+            logger.error(f"{log_prefix} Error in log_websocket_message: {e}", exc_info=True)
+            # Fallback: Logge den rohen String, wenn möglich
+            if isinstance(message, str):
+                logger.info(f"{log_prefix} RAW TEXT (after error): {message[:200]}...")
+            elif isinstance(message, bytes):
+                 logger.info(f"{log_prefix} RAW BYTES (after error, preview): {message[:50].hex()}...")
+
+    else:
+        logger.info(f"{log_prefix} UNKNOWN TYPE: {type(message)} - {str(message)[:100]}...")
 
 # SEND WITH CONFIRMATION
 async def send_with_confirmation(ws, message, timeout=1.0, max_retries=3, expect_confirmation=True):
