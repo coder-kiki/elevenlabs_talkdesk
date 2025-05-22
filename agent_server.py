@@ -529,12 +529,26 @@ class ContextManager:
         return time.time() - self.agent_speaking_start_time
     
     async def start_new_context(self, ws):
-        # Generiere eine neue Kontext-ID (primär für clientseitiges Logging, falls benötigt)
-        # Wir senden keine explizite "create context" Nachricht mehr an ElevenLabs.
-        # Das Kontextmanagement wird vermutlich serverseitig gehandhabt.
+        # TESTWEISE WIEDERHERSTELLUNG: Sende "create context" Nachricht "fire-and-forget"
+        # um zu sehen, ob dies den proaktiven Start des Agenten auslöst.
         self.current_context_id = f"context_{uuid.uuid4().hex}"
-        metrics.increment("context_switches") # Zählt weiterhin logische Kontextwechsel clientseitig
-        logger.info(f"Logischer neuer Kontext clientseitig gestartet: {self.current_context_id}. Es wird keine 'create' Nachricht an ElevenLabs gesendet.")
+        metrics.increment("context_switches")
+        
+        create_context_msg = {
+            "type": "context_control",
+            "context_control": {
+                "action": "create",
+                "context_id": self.current_context_id
+            }
+        }
+        try:
+            await ws.send(json.dumps(create_context_msg))
+            log_websocket_message("SENT-ELEVENLABS (test_create_context)", create_context_msg)
+            logger.info(f"Testweise 'create context'-Nachricht gesendet für {self.current_context_id} (fire-and-forget).")
+        except Exception as e:
+            logger.error(f"Fehler beim testweisen Senden der 'create context'-Nachricht: {e}")
+            # Trotz Fehler die ID zurückgeben, da der Rest des Systems sie erwartet
+        
         return self.current_context_id
     
     async def handle_interruption(self, ws):
