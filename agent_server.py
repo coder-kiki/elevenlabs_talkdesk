@@ -1387,27 +1387,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Unbehandelter Fehler: {e}", exc_info=True)
         metrics.record_error("UnhandledError", str(e))
-
-</final_file_content>
-
-IMPORTANT: For any future changes to this file, use the final_file_content shown above as your reference. This content reflects the current state of the file, including any auto-formatting (e.g., if you used single quotes but the formatter converted them to double quotes). Always base your SEARCH/REPLACE operations on this final version to ensure accuracy.<environment_details>
-# VSCode Visible Files
-../../../../extension-output-etmoffat.pip-packages-#1-Pip package updater
-agent_server.py
-
-# VSCode Open Tabs
-Dockerfile
-Elevenlabs_Docs
-API-Reference-Elevenlabs
-agent_server.py
-requirements.txt
-
-# Current Time
-22.5.2025, 0:25:04 PM (Europe/Athens, UTC+3:00)
-
-# Context Window Usage
-565.404 / 1.048,576K tokens used (54%)
-
-# Current Mode
-ACT MODE
-</environment_details>
