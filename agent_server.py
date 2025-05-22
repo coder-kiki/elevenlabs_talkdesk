@@ -162,7 +162,9 @@ WEBSOCKET_PORT = int(os.environ.get("WEBSOCKET_PORT", "8080"))
 VAD_ENERGY_THRESHOLD = float(os.environ.get("VAD_ENERGY_THRESHOLD", "0.0008"))  # Drastisch reduzierter Schwellenwert basierend auf tatsächlichen Energiewerten
 VAD_SPEECH_DURATION_THRESHOLD = float(os.environ.get("VAD_SPEECH_DURATION_THRESHOLD", "0.25"))  # Erhöht auf 0.25s gemäß Benutzerwunsch
 VAD_SILENCE_DURATION_THRESHOLD = float(os.environ.get("VAD_SILENCE_DURATION_THRESHOLD", "0.5"))
-VAD_GRACE_PERIOD_AFTER_AGENT_STARTS = float(os.environ.get("VAD_GRACE_PERIOD_AFTER_AGENT_STARTS", "1.0")) # NEU: 1 Sekunde Schonfrist
+VAD_GRACE_PERIOD_AFTER_AGENT_STARTS = float(os.environ.get("VAD_GRACE_PERIOD_AFTER_AGENT_STARTS", "1.0")) # 1 Sekunde Schonfrist
+USER_SHORT_UTTERANCE_THRESHOLD = float(os.environ.get("USER_SHORT_UTTERANCE_THRESHOLD", "0.8")) # Kurze Äußerung
+USER_LONG_INTERRUPTION_THRESHOLD = float(os.environ.get("USER_LONG_INTERRUPTION_THRESHOLD", "1.5")) # Echte Unterbrechung
 LOG_INTERVAL = int(os.environ.get("LOG_INTERVAL", "300"))  # 5 Minuten
 DEBUG_LOGGING = os.environ.get("DEBUG_LOGGING", "true").lower() == "true"  # Detaillierte Logs aktivieren
 USE_SPEECH_RECOGNITION = os.environ.get("USE_SPEECH_RECOGNITION", "true").lower() == "true"  # Spracherkennung für bessere Unterbrechungserkennung
@@ -522,8 +524,8 @@ class ContextManager:
         self.agent_in_pause = False
         self.last_audio_time = 0
         self.audio_timeout = 0.5  # Wenn 0.5s kein Audio, dann spricht der Agent nicht mehr
-        self.user_has_interrupted = False # NEUES FLAG
-        self.agent_just_started_speaking_timestamp = None # NEU für VAD Schonfrist
+        self.user_has_interrupted = False 
+        self.agent_just_started_speaking_timestamp = None 
         
     @property
     def agent_speaking_duration(self):
@@ -599,7 +601,16 @@ class ContextManager:
         
         self.is_agent_speaking = False
         self.agent_speaking_start_time = None
+        # self.agent_just_started_speaking_timestamp = None # Nicht hier zurücksetzen, erst wenn er neu startet
         self.agent_in_pause = False
+        # user_has_interrupted wird hier nicht geändert, das passiert bei user_speech_session_ended oder agent_started_speaking
+
+    def user_speech_session_ended(self):
+        """Wird aufgerufen, wenn die VAD des Benutzers Stille nach Sprache erkennt."""
+        if self.user_has_interrupted:
+            logger.info("Benutzersprache (die eine Unterbrechung war) beendet. Setze user_has_interrupted=False.")
+            self.user_has_interrupted = False
+        # Ansonsten keine Aktion nötig, wenn keine Unterbrechung aktiv war.
     
     def update_speaking_status(self, current_time):
         """Aktualisiert den Sprechstatus basierend auf der Zeit seit dem letzten Audio-Chunk"""
@@ -1107,11 +1118,14 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                             logger.info(f"Benutzeraktivität während Agent spricht, aber innerhalb der VAD-Schonfrist ({VAD_GRACE_PERIOD_AFTER_AGENT_STARTS}s). Keine Unterbrechung ausgelöst.")
                                     
                                     if not in_grace_period:
-                                        logger.info("Benutzeraktivität während Agent spricht (außerhalb Schonfrist): Stoppe Agenten-Audio clientseitig.")
-                                        context_manager.stop_agent_audio_output_immediately()
-                                    # Wir senden keine expliziten interruption/abort Befehle mehr.
-                                    # Die weitere Handhabung (neue Agentenantwort) wird durch das Senden
-                                    # des user_audio_chunk an ElevenLabs und deren serverseitige Logik getriggert.
+                                        # Differenzierte Unterbrechungserkennung
+                                        if speech_duration >= USER_LONG_INTERRUPTION_THRESHOLD:
+                                            logger.info(f"Echte Unterbrechung erkannt (Dauer: {speech_duration:.2f}s >= {USER_LONG_INTERRUPTION_THRESHOLD}s). Stoppe Agenten-Audio.")
+                                            context_manager.stop_agent_audio_output_immediately()
+                                        elif speech_duration >= USER_SHORT_UTTERANCE_THRESHOLD: # Und implizit < LONG_INTERRUPTION_THRESHOLD
+                                            logger.info(f"Kurze Benutzereinwendung erkannt (Dauer: {speech_duration:.2f}s). Agent wird NICHT unterbrochen.")
+                                            # Hier könnte man optional eine Info an ElevenLabs senden, wenn deren API es unterstützt
+                                        # else: Äußerung ist kürzer als USER_SHORT_UTTERANCE_THRESHOLD, wird ignoriert (außer für VAD-Status)
                             
                             # Füge Audio zum Spracherkennungspuffer hinzu
                             speech_recognizer.add_audio(payload)
@@ -1143,9 +1157,11 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                             metrics.increment("packets_sent")
                             
                             # Reset, wenn keine Sprache mehr erkannt wird
-                            if not vad.is_speaking and speech_start_time is not None:
-                                logger.info(f"Benutzer hat aufgehört zu sprechen (nach {current_time - speech_start_time:.2f}s)")
-                                speech_start_time = None
+                            if not vad.is_speaking and speech_start_time is not None: # Benutzer hat aufgehört zu sprechen
+                                user_speech_total_duration = current_time - speech_start_time
+                                logger.info(f"Benutzer hat aufgehört zu sprechen (Gesamtdauer: {user_speech_total_duration:.2f}s)")
+                                context_manager.user_speech_session_ended() # Wichtig: user_has_interrupted zurücksetzen
+                                speech_start_time = None # Redezeit des Benutzers für den nächsten Turn zurücksetzen
                         except Exception as chunk_error:
                             logger.error(f"Fehler bei Audio-Chunk-Verarbeitung: {chunk_error}")
                             # Audio trotzdem senden, um Kontinuität zu gewährleisten
