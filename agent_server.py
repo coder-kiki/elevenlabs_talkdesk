@@ -23,6 +23,9 @@ from typing import Dict, Any, Optional, Callable, List, Union, Set
 async def process_audio_with_elevenlabs_stt(audio_bytes):
     """Verarbeitet Audio mit der ElevenLabs Speech-to-Text API gemäß offizieller Dokumentation."""
     try:
+        # HINZUGEFÜGTES LOGGING:
+        logger.info(f"Sende {len(audio_bytes)} Bytes WAV-Daten an ElevenLabs STT.")
+        
         # ElevenLabs STT API-Endpunkt
         url = "https://api.elevenlabs.io/v1/speech-to-text"
         
@@ -78,7 +81,7 @@ class SpeechRecognizer:
         self.audio_buffer = bytearray()
         self.last_recognition_time = 0
         self.recognition_interval = 0.5  # Reduziert für schnellere Erkennung
-        self.min_buffer_size = 6000  # Reduziert für schnellere Erkennung (ca. 0.75 Sekunden Audio)
+        self.min_buffer_size = 12000  # ERHÖHT von 6000 (ca. 1.5 Sekunden Audio)
         self.max_buffer_size = 32000  # Maximale Puffergröße (ca. 4 Sekunden Audio)
         self.is_processing = False
         
