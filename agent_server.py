@@ -1310,22 +1310,10 @@ async def handle_connection(websocket):
             await el_ws.close()
             return
             
-        # Versuche, eine erste Antwort von ElevenLabs zu empfangen
-        try:
-            logger.info("Warte auf erste Nachricht von ElevenLabs nach Initial Config...")
-            first_el_message = await asyncio.wait_for(el_ws.recv(), timeout=5.0)
-            logger.info("Erste Nachricht von ElevenLabs empfangen.")
-            log_websocket_message("RECV-ELEVENLABS (initial)", first_el_message)
-            # Hier könnte eine Überprüfung der ersten Nachricht stattfinden, z.B. auf conversation_initiation_metadata
-            # Fürs Erste loggen wir sie nur.
-        except asyncio.TimeoutError:
-            logger.warning("Timeout beim Warten auf die erste Nachricht von ElevenLabs nach Initial Config.")
-            # Wir versuchen trotzdem weiterzumachen, vielleicht ist keine sofortige Antwort zwingend.
-        except Exception as e:
-            logger.error(f"Fehler beim Empfangen der ersten Nachricht von ElevenLabs: {e}", exc_info=True)
-            metrics.record_error("ElevenLabsRecvError", str(e))
-            await el_ws.close()
-            return
+        # Der explizite Empfang der ersten Nachricht wird entfernt.
+        # stream_elevenlabs_to_talkdesk wird alle Nachrichten von el_ws handhaben,
+        # einschließlich conversation_initiation_metadata und dem ersten Audio.
+        logger.info("Initial Config gesendet. Starte Kontext-Manager und Streaming-Tasks.")
 
         # Kontext-Manager initialisieren
         context_manager = ContextManager()
