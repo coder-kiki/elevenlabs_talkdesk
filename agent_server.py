@@ -1106,31 +1106,43 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                             if is_voice_active:
                                 if speech_start_time is None:
                                     speech_start_time = current_time
-                                    logger.info("Benutzersprache erkannt")
+                                    logger.info("Benutzersprache erkannt (stream_talkdesk_to_elevenlabs)") # Eindeutiger machen
                                 
                                 # Wenn Agent spricht, klassifiziere die Unterbrechung
-                                if context_manager.is_agent_speaking:
+                                if context_manager.is_agent_speaking: # Agent spricht auch
                                     speech_duration = current_time - speech_start_time
-                                    
+                                    current_chunk_energy = 0.0
                                     try:
-                                        energy = vad.calculate_energy(payload)
+                                        current_chunk_energy = vad.calculate_energy(payload) # Energie des aktuellen Chunks
                                     except Exception as e:
-                                        logger.error(f"Fehler bei Energieberechnung: {e}")
-                                        energy = 0.001  # Fallback-Wert basierend auf typischen Werten
+                                        logger.error(f"Fehler bei Energieberechnung für Unterbrechungs-Check: {e}")
+                                        current_chunk_energy = 0.001  # Fallback
                                     
-                                    logger.info(f"Potenzielle Unterbrechung: Benutzer spricht seit {speech_duration:.2f}s, Agent spricht seit {context_manager.agent_speaking_duration:.2f}s")
+                                    # NEUES LOGGING (Punkt 1)
+                                    logger.info(f"[INTERRUPTION_CHECK] User speech detected while agent speaking. "
+                                                f"UserSpeechDuration: {speech_duration:.2f}s, "
+                                                f"ChunkEnergy: {current_chunk_energy:.6f}, "
+                                                f"AgentSpeakingDuration: {context_manager.agent_speaking_duration:.2f}s, "
+                                                f"AgentInPause: {context_manager.agent_in_pause}, "
+                                                f"LastUserText: '{interruption_classifier.last_speech_text}'")
                                     
-                                    # Klassifiziere die Unterbrechung basierend auf Dauer und Energie
                                     interruption_type = interruption_classifier.classify_interruption(
                                         duration=speech_duration,
-                                        energy=energy,
+                                        energy=current_chunk_energy, # Verwende die bereits berechnete Energie
                                         agent_speaking_duration=context_manager.agent_speaking_duration,
                                         agent_in_pause=context_manager.agent_in_pause
                                     )
                                     
+                                    # NEUES LOGGING (Punkt 2)
+                                    logger.info(f"[INTERRUPTION_CLASSIFIED] Type: {interruption_type}")
+                                    
                                     if interruption_type == "INTERRUPTION":
+                                        # NEUES LOGGING (Punkt 3)
+                                        logger.info(f"[INTERRUPTION_HANDLER_CALL] Calling handle_interruption for context {context_manager.current_context_id}")
                                         await context_manager.handle_interruption(el_ws)
                                     elif interruption_type == "BACKCHANNELING":
+                                        # NEUES LOGGING (Punkt 3)
+                                        logger.info(f"[BACKCHANNELING_HANDLER_CALL] Calling handle_backchanneling for context {context_manager.current_context_id}")
                                         await context_manager.handle_backchanneling(el_ws)
                             
                             # Füge Audio zum Spracherkennungspuffer hinzu
