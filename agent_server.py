@@ -1338,12 +1338,37 @@ async def handle_connection(websocket):
         # Der explizite Empfang der ersten Nachricht wird entfernt.
         # stream_elevenlabs_to_talkdesk wird alle Nachrichten von el_ws handhaben,
         # einschließlich conversation_initiation_metadata und dem ersten Audio.
-        logger.info("Initial Config gesendet. Starte Kontext-Manager und Streaming-Tasks.")
+        # logger.info("Initial Config gesendet. Starte Kontext-Manager und Streaming-Tasks.") # Wird unten neu positioniert
 
         # Kontext-Manager initialisieren
         context_manager = ContextManager()
-        # start_new_context sendet keine Nachricht mehr, nur Logging und ID-Generierung
+        # start_new_context sendet die testweise "create context" Nachricht fire-and-forget
         await context_manager.start_new_context(el_ws) 
+
+        # NEU: Explizit auf die erste Antwort von ElevenLabs warten (erwartet: conversation_initiation_metadata)
+        # Dies gibt dem Server Zeit zu reagieren, bevor die Haupt-Streaming-Schleifen beginnen.
+        try:
+            logger.info("Warte auf erste Antwort von ElevenLabs nach Initial Config und Create Context (max 5s)...")
+            first_server_message_str = await asyncio.wait_for(el_ws.recv(), timeout=5.0)
+            if elevenlabs_monitor:
+                elevenlabs_monitor.record_received() # Manuell aufzeichnen, da es außerhalb der Stream-Schleife ist
+            log_websocket_message("RECV-ELEVENLABS (initial_response)", first_server_message_str)
+            
+            # Optional: Überprüfen, ob es 'conversation_initiation_metadata' ist
+            try:
+                first_server_message_json = json.loads(first_server_message_str)
+                if first_server_message_json.get("type") == "conversation_initiation_metadata":
+                    logger.info("Erfolgreich 'conversation_initiation_metadata' als erste Antwort empfangen.")
+                else:
+                    logger.warning(f"Unerwartete erste Antwort von ElevenLabs: Typ {first_server_message_json.get('type')}")
+            except json.JSONDecodeError:
+                logger.warning("Erste Antwort von ElevenLabs war kein valides JSON.")
+        except asyncio.TimeoutError:
+            logger.warning("Timeout beim Warten auf die erste Antwort von ElevenLabs. Starte Streaming-Tasks trotzdem.")
+        except Exception as e:
+            logger.error(f"Fehler beim Warten/Empfangen der ersten Antwort von ElevenLabs: {e}. Starte Streaming-Tasks trotzdem.")
+            metrics.record_error("ElevenLabsInitialRecvError", str(e))
+            # Nicht abbrechen, versuche trotzdem, die Streams zu starten
 
         # TASKS STARTEN
         logger.info("Starte Streaming-Tasks...")
