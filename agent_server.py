@@ -16,6 +16,8 @@ import io
 import wave
 from websockets.connection import State
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, ConnectionClosedError
+from datetime import datetime
+from typing import Dict, Any, Optional, Callable, List, Union, Set
 
 # ELEVENLABS SPEECH-TO-TEXT
 async def process_audio_with_elevenlabs_stt(audio_bytes):
@@ -133,7 +135,7 @@ class SpeechRecognizer:
                 
         return None
 
-SCRIPT_VERSION = "5.7 - Enhanced Barge-in with ElevenLabs STT and Optimized Interruption Detection"
+SCRIPT_VERSION = "5.8 - Enhanced Barge-in with Reliable Interruption Signaling and WebSocket Monitoring"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logger.info(f"Starte Agent Server - VERSION {SCRIPT_VERSION}")
@@ -557,22 +559,46 @@ class ContextManager:
             self.agent_in_pause = False
             
             try:
-                # Optimierte Reihenfolge für schnellere Unterbrechung:
+                # Optimierte Reihenfolge für schnellere Unterbrechung mit zuverlässiger Bestätigung:
                 # 1. Sende zuerst das direkte Interruption-Signal (höchste Priorität)
-                await ws.send(json.dumps({
-                    "type": "interruption"
-                }))
-                logger.info("Direktes Interruption-Signal gesendet")
+                interruption_msg = {
+                    "type": "interruption",
+                    "timestamp": time.time()
+                }
+                
+                # Verwende send_with_confirmation mit kurzer Timeout-Zeit für schnelle Reaktion
+                sent_interruption = await send_with_confirmation(
+                    ws, 
+                    interruption_msg,
+                    timeout=0.5,  # Kurzer Timeout für schnelle Reaktion
+                    max_retries=2  # Wenige Versuche für schnelle Reaktion
+                )
+                
+                if sent_interruption:
+                    logger.info("Direktes Interruption-Signal gesendet und bestätigt")
+                else:
+                    logger.warning("Keine Bestätigung für Interruption-Signal erhalten")
                 
                 # 2. Sende sofort das Abort-Signal für den aktuellen Kontext
-                await ws.send(json.dumps({
+                abort_msg = {
                     "type": "context_control",
                     "context_control": {
                         "action": "abort",
                         "context_id": old_context_id
                     }
-                }))
-                logger.info(f"Kontext-Abort-Signal für {old_context_id} gesendet")
+                }
+                
+                sent_abort = await send_with_confirmation(
+                    ws, 
+                    abort_msg,
+                    timeout=0.8,  # Etwas längerer Timeout für Kontext-Operationen
+                    max_retries=3
+                )
+                
+                if sent_abort:
+                    logger.info(f"Kontext-Abort-Signal für {old_context_id} gesendet und bestätigt")
+                else:
+                    logger.warning(f"Keine Bestätigung für Kontext-Abort-Signal erhalten")
                 
                 # 3. Erstelle einen neuen Kontext für die nächste Antwort
                 # Verzögere die Erstellung des neuen Kontexts um 100ms, um sicherzustellen, dass der alte Kontext abgebrochen wurde
@@ -597,17 +623,30 @@ class ContextManager:
             logger.info(f"Backchanneling erkannt, pausiere Kontext {self.current_context_id}")
             
             try:
-                # Sende Pausensignal
-                await ws.send(json.dumps({
+                # Sende Pausensignal mit Bestätigung
+                pause_msg = {
                     "type": "context_control",
                     "context_control": {
                         "action": "pause",
                         "context_id": self.current_context_id
                     }
-                }))
+                }
                 
-                self.agent_in_pause = True
-                metrics.increment("backchanneling_detected")
+                sent_pause = await send_with_confirmation(
+                    ws, 
+                    pause_msg,
+                    timeout=0.8,
+                    max_retries=2
+                )
+                
+                if sent_pause:
+                    logger.info(f"Pause-Signal für Kontext {self.current_context_id} gesendet und bestätigt")
+                    self.agent_in_pause = True
+                    metrics.increment("backchanneling_detected")
+                else:
+                    logger.warning(f"Keine Bestätigung für Pause-Signal erhalten")
+                    # Trotzdem als pausiert markieren, um konsistenten Zustand zu gewährleisten
+                    self.agent_in_pause = True
                 
                 # Kurze Pause einlegen
                 await asyncio.sleep(0.5)
@@ -615,14 +654,29 @@ class ContextManager:
                 # Fortsetzen, wenn kein Abbruch erfolgt ist
                 if self.agent_in_pause and self.is_agent_speaking:
                     logger.info(f"Setze Kontext fort: {self.current_context_id}")
-                    await ws.send(json.dumps({
+                    
+                    resume_msg = {
                         "type": "context_control",
                         "context_control": {
                             "action": "resume",
                             "context_id": self.current_context_id
                         }
-                    }))
-                    self.agent_in_pause = False
+                    }
+                    
+                    sent_resume = await send_with_confirmation(
+                        ws, 
+                        resume_msg,
+                        timeout=0.8,
+                        max_retries=2
+                    )
+                    
+                    if sent_resume:
+                        logger.info(f"Resume-Signal für Kontext {self.current_context_id} gesendet und bestätigt")
+                        self.agent_in_pause = False
+                    else:
+                        logger.warning(f"Keine Bestätigung für Resume-Signal erhalten")
+                        # Trotzdem Pause-Status zurücksetzen, um weiteres Sprechen zu ermöglichen
+                        self.agent_in_pause = False
             except Exception as e:
                 logger.error(f"Fehler bei Kontext-Steuerung (pause/resume): {e}")
                 metrics.increment("context_control_failures")
@@ -652,6 +706,248 @@ class ContextManager:
         if self.is_agent_speaking and current_time - self.last_audio_time > self.audio_timeout:
             logger.info(f"Kein Audio vom Agent seit {self.audio_timeout}s - setze Status auf 'nicht sprechend'")
             self.agent_stopped_speaking()
+
+# WEBSOCKET MONITORING
+class WebSocketMonitor:
+    """Überwacht den Status einer WebSocket-Verbindung und protokolliert Aktivitäten."""
+    def __init__(self, name="WebSocket"):
+        self.name = name
+        self.messages_sent = 0
+        self.messages_received = 0
+        self.last_activity = time.time()
+        self.monitoring_task = None
+        self.message_handlers = set()
+        self.is_closed = False
+        
+    async def start_monitoring(self, ws):
+        """Startet die Überwachung einer WebSocket-Verbindung."""
+        self.websocket = ws
+        self.monitoring_task = asyncio.create_task(self._monitor())
+        logger.info(f"{self.name}-Monitor gestartet")
+        
+    async def _monitor(self):
+        """Überwacht die WebSocket-Verbindung in regelmäßigen Abständen."""
+        while not self.is_closed:
+            try:
+                await asyncio.sleep(5)  # Alle 5 Sekunden prüfen
+                
+                # Prüfe, ob die Verbindung noch aktiv ist
+                if hasattr(self.websocket, 'closed') and self.websocket.closed:
+                    logger.warning(f"{self.name} ist geschlossen")
+                    self.is_closed = True
+                    break
+                    
+                # Prüfe auf Inaktivität
+                inactivity_time = time.time() - self.last_activity
+                if inactivity_time > 30:  # 30 Sekunden Inaktivität
+                    logger.warning(f"{self.name} ist seit {inactivity_time:.1f}s inaktiv")
+                    
+                # Protokolliere Statistiken
+                logger.debug(f"{self.name} Status: Gesendet={self.messages_sent}, Empfangen={self.messages_received}")
+                
+            except Exception as e:
+                logger.error(f"Fehler bei {self.name}-Überwachung: {e}")
+                
+    def record_sent(self):
+        """Protokolliert eine gesendete Nachricht."""
+        self.messages_sent += 1
+        self.last_activity = time.time()
+        
+    def record_received(self):
+        """Protokolliert eine empfangene Nachricht."""
+        self.messages_received += 1
+        self.last_activity = time.time()
+        
+    def add_message_handler(self, handler):
+        """Fügt einen Handler für eingehende Nachrichten hinzu."""
+        self.message_handlers.add(handler)
+        
+    def remove_message_handler(self, handler):
+        """Entfernt einen Handler für eingehende Nachrichten."""
+        if handler in self.message_handlers:
+            self.message_handlers.remove(handler)
+        
+    def process_message(self, message):
+        """Verarbeitet eine eingehende Nachricht mit allen registrierten Handlern."""
+        for handler in self.message_handlers:
+            try:
+                handler(message)
+            except Exception as e:
+                logger.error(f"Fehler bei Nachrichtenverarbeitung: {e}")
+        
+    def stop(self):
+        """Stoppt die Überwachung."""
+        self.is_closed = True
+        if self.monitoring_task:
+            self.monitoring_task.cancel()
+        logger.info(f"{self.name}-Monitor gestoppt")
+
+# LATENCY TRACKER
+class LatencyTracker:
+    """Misst die Latenz für verschiedene Operationen."""
+    def __init__(self):
+        self.operations = {}
+        self.latency_stats = {}
+        
+    def start(self, operation_name):
+        """Startet die Zeitmessung für eine Operation."""
+        self.operations[operation_name] = time.time()
+        
+    def end(self, operation_name):
+        """Beendet die Zeitmessung für eine Operation und protokolliert die Latenz."""
+        if operation_name in self.operations:
+            duration_ms = (time.time() - self.operations[operation_name]) * 1000
+            logger.info(f"Latenz für {operation_name}: {duration_ms:.2f}ms")
+            
+            # Aktualisiere Statistiken
+            if operation_name not in self.latency_stats:
+                self.latency_stats[operation_name] = {
+                    'count': 0,
+                    'total': 0,
+                    'min': float('inf'),
+                    'max': 0
+                }
+            
+            stats = self.latency_stats[operation_name]
+            stats['count'] += 1
+            stats['total'] += duration_ms
+            stats['min'] = min(stats['min'], duration_ms)
+            stats['max'] = max(stats['max'], duration_ms)
+            
+            del self.operations[operation_name]
+            return duration_ms
+        return None
+    
+    def get_stats(self, operation_name=None):
+        """Gibt Statistiken für eine bestimmte Operation oder alle Operationen zurück."""
+        if operation_name:
+            if operation_name in self.latency_stats:
+                stats = self.latency_stats[operation_name]
+                return {
+                    'count': stats['count'],
+                    'avg': stats['total'] / stats['count'] if stats['count'] > 0 else 0,
+                    'min': stats['min'] if stats['min'] != float('inf') else 0,
+                    'max': stats['max']
+                }
+            return None
+        
+        # Alle Statistiken zurückgeben
+        result = {}
+        for op_name, stats in self.latency_stats.items():
+            result[op_name] = {
+                'count': stats['count'],
+                'avg': stats['total'] / stats['count'] if stats['count'] > 0 else 0,
+                'min': stats['min'] if stats['min'] != float('inf') else 0,
+                'max': stats['max']
+            }
+        return result
+
+# WEBSOCKET MESSAGE LOGGING
+def log_websocket_message(direction, message, is_binary=False):
+    """Protokolliert WebSocket-Nachrichten mit Richtung und Zeitstempel."""
+    timestamp = time.strftime("%H:%M:%S.%f")[:-3]
+    if is_binary:
+        logger.debug(f"[{timestamp}] {direction} BINARY: {len(message)} bytes")
+    else:
+        try:
+            if isinstance(message, str):
+                parsed = json.loads(message)
+            else:
+                parsed = message
+                
+            # Sensible Daten maskieren
+            if isinstance(parsed, dict):
+                # Audio-Daten kürzen
+                if "user_audio_chunk" in parsed:
+                    parsed["user_audio_chunk"] = f"[AUDIO: {len(parsed['user_audio_chunk'])} chars]"
+                elif "audio_event" in parsed and "audio_base_64" in parsed["audio_event"]:
+                    parsed["audio_event"]["audio_base_64"] = f"[AUDIO: {len(parsed['audio_event']['audio_base_64'])} chars]"
+                
+                # API-Keys maskieren
+                if "xi-api-key" in parsed:
+                    parsed["xi-api-key"] = "***REDACTED***"
+                
+            logger.debug(f"[{timestamp}] {direction} JSON: {json.dumps(parsed, indent=2)}")
+        except:
+            if isinstance(message, str):
+                logger.debug(f"[{timestamp}] {direction} TEXT: {message[:100]}...")
+            else:
+                logger.debug(f"[{timestamp}] {direction} UNKNOWN: {type(message)}")
+
+# SEND WITH CONFIRMATION
+async def send_with_confirmation(ws, message, timeout=1.0, max_retries=3):
+    """Sendet eine Nachricht und wartet auf Bestätigung."""
+    message_id = str(uuid.uuid4())
+    confirmation_received = asyncio.Event()
+    
+    # Erstelle eine Kopie der Nachricht mit message_id
+    if isinstance(message, dict):
+        message_with_id = message.copy()
+        message_with_id["message_id"] = message_id
+    else:
+        # Wenn es ein String ist, versuche ihn als JSON zu parsen
+        try:
+            message_dict = json.loads(message)
+            message_dict["message_id"] = message_id
+            message_with_id = json.dumps(message_dict)
+        except:
+            # Wenn es kein gültiges JSON ist, können wir keine ID hinzufügen
+            logger.warning("Konnte keine message_id hinzufügen, da die Nachricht kein gültiges JSON ist")
+            message_with_id = message
+    
+    # Funktion zum Verarbeiten eingehender Nachrichten
+    def on_message(msg):
+        try:
+            if isinstance(msg, str):
+                data = json.loads(msg)
+            else:
+                data = msg
+                
+            # Prüfe auf Bestätigung
+            if (data.get("type") == "confirmation" or 
+                (data.get("type") == "context_control_response" and data.get("message_id") == message_id) or
+                (data.get("context_control_response", {}).get("message_id") == message_id)):
+                confirmation_received.set()
+        except Exception as e:
+            logger.error(f"Fehler bei Bestätigungsverarbeitung: {e}")
+    
+    # Temporären Handler für WebSocket-Monitor erstellen
+    monitor = getattr(ws, '_monitor', None)
+    if monitor:
+        monitor.add_message_handler(on_message)
+    
+    # Nachricht senden und auf Bestätigung warten
+    for attempt in range(max_retries):
+        try:
+            # Nachricht als String oder Dict senden
+            if isinstance(message_with_id, dict):
+                await ws.send(json.dumps(message_with_id))
+            else:
+                await ws.send(message_with_id)
+                
+            log_websocket_message("SENT", message_with_id)
+            logger.debug(f"Nachricht gesendet (Versuch {attempt+1}/{max_retries}): {message_id}")
+            
+            try:
+                await asyncio.wait_for(confirmation_received.wait(), timeout=timeout)
+                logger.debug(f"Bestätigung für Nachricht {message_id} erhalten")
+                
+                # Handler entfernen
+                if monitor:
+                    monitor.remove_message_handler(on_message)
+                    
+                return True
+            except asyncio.TimeoutError:
+                logger.warning(f"Keine Bestätigung für Nachricht {message_id} erhalten (Versuch {attempt+1})")
+        except Exception as e:
+            logger.error(f"Fehler beim Senden der Nachricht: {e}")
+    
+    # Handler entfernen
+    if monitor:
+        monitor.remove_message_handler(on_message)
+        
+    logger.error(f"Keine Bestätigung für Nachricht {message_id} nach {max_retries} Versuchen")
+    return False
 
 # SANITIZE LOG FUNCTION
 def sanitize_log(message, sensitive_fields=["xi-api-key", "api_key", "password"]):
@@ -708,6 +1004,13 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
     last_status_check = time.time()
     status_check_interval = 0.5  # Alle 0.5 Sekunden den Sprechstatus prüfen
     
+    # Zugriff auf die WebSocket-Monitore
+    talkdesk_monitor = getattr(websocket, '_monitor', None)
+    elevenlabs_monitor = getattr(el_ws, '_monitor', None)
+    
+    # Latenz-Tracking für Audio-Verarbeitung
+    latency_tracker = LatencyTracker()
+    
     # Statistik für Energiewerte
     energy_samples = []
     last_energy_stats_time = time.time()
@@ -720,8 +1023,14 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
     try:
         while True:
             try:
-                # Direkte Verwendung des Websocket-Objekts ohne Wrapper
+                # Empfange Nachricht von Talkdesk
                 message_str = await websocket.recv()
+                
+                # Protokolliere empfangene Nachricht
+                if talkdesk_monitor:
+                    talkdesk_monitor.record_received()
+                log_websocket_message("RECV-TALKDESK", message_str)
+                
                 data = json.loads(message_str)
                 
                 current_time = time.time()
@@ -853,7 +1162,11 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                             await context_manager.handle_backchanneling(el_ws)
                             
                             # Audio an ElevenLabs senden
-                            await el_ws.send(json.dumps({"user_audio_chunk": payload}))
+                            audio_msg = {"user_audio_chunk": payload}
+                            await el_ws.send(json.dumps(audio_msg))
+                            if elevenlabs_monitor:
+                                elevenlabs_monitor.record_sent()
+                            log_websocket_message("SENT-ELEVENLABS", audio_msg)
                             metrics.increment("packets_sent")
                             
                             # Reset, wenn keine Sprache mehr erkannt wird
@@ -877,12 +1190,24 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
         metrics.record_error("TalkdeskToElevenLabsError", str(e))
 
 async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_manager):
+    # Zugriff auf die WebSocket-Monitore
+    elevenlabs_monitor = getattr(el_ws, '_monitor', None)
+    talkdesk_monitor = getattr(websocket, '_monitor', None)
+    
+    # Latenz-Tracking für Audio-Übertragung
+    latency_tracker = LatencyTracker()
+    
     try:
         while True:
             try:
-                # Direkte Verwendung des WebSocket-Objekts
+                # Empfange Nachricht von ElevenLabs
                 message_str = await el_ws.recv()
                 metrics.increment("packets_received")
+                
+                # Protokolliere empfangene Nachricht
+                if elevenlabs_monitor:
+                    elevenlabs_monitor.record_received()
+                log_websocket_message("RECV-ELEVENLABS", message_str)
                 
                 data = json.loads(message_str)
                 current_time = time.time()
@@ -894,32 +1219,58 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                         # Markiere Agent als sprechend und aktualisiere Zeitstempel
                         context_manager.agent_started_speaking()
                         
-                        # Sende Audio an Talkdesk
-                        await websocket.send(json.dumps({
+                        # Messe Latenz für Audio-Übertragung
+                        latency_tracker.start("audio_forward")
+                        
+                        # Erstelle Talkdesk-Audio-Nachricht
+                        talkdesk_msg = {
                             "event": "media",
                             "streamSid": stream_sid,
                             "media": {"payload": b64_audio}
-                        }))
+                        }
+                        
+                        # Sende Audio an Talkdesk
+                        await websocket.send(json.dumps(talkdesk_msg))
+                        if talkdesk_monitor:
+                            talkdesk_monitor.record_sent()
+                        log_websocket_message("SENT-TALKDESK", talkdesk_msg)
                         metrics.increment("packets_sent")
+                        
+                        # Ende der Latenz-Messung
+                        latency_tracker.end("audio_forward")
                 
                 # Verarbeite Kontext-Events
                 elif data.get("type") == "context_control_response":
                     control_response = data.get("context_control_response", {})
                     action = control_response.get("action")
                     success = control_response.get("success", False)
+                    message_id = control_response.get("message_id", "unknown")
                     
                     if action == "abort" and success:
-                        logger.info("Kontext erfolgreich abgebrochen")
+                        logger.info(f"Kontext erfolgreich abgebrochen (message_id: {message_id})")
                         context_manager.agent_stopped_speaking()
                     elif action == "pause" and success:
-                        logger.info("Kontext erfolgreich pausiert")
+                        logger.info(f"Kontext erfolgreich pausiert (message_id: {message_id})")
                     elif action == "resume" and success:
-                        logger.info("Kontext erfolgreich fortgesetzt")
+                        logger.info(f"Kontext erfolgreich fortgesetzt (message_id: {message_id})")
+                    elif action == "create" and success:
+                        logger.info(f"Kontext erfolgreich erstellt (message_id: {message_id})")
+                    else:
+                        logger.info(f"Kontext-Steuerung: Aktion={action}, Erfolg={success}, ID={message_id}")
                 
                 # Verarbeite End-Events
                 elif data.get("type") == "end":
                     logger.info("Ende des Streams von ElevenLabs")
                     context_manager.agent_stopped_speaking()
+                
+                # Verarbeite Bestätigungsnachrichten
+                elif data.get("type") == "confirmation":
+                    logger.debug(f"Bestätigung erhalten: {data.get('message_id', 'unknown')}")
+                
+                # Verarbeite andere Nachrichtentypen
+                else:
+                    logger.debug(f"Unbekannter Nachrichtentyp von ElevenLabs: {data.get('type', 'unknown')}")
+                    
             except ConnectionClosed:
                 logger.info("ElevenLabs WebSocket-Verbindung geschlossen")
                 break
@@ -936,16 +1287,31 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
 async def handle_connection(websocket):
     remote = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
     logger.info(f"Neue Verbindung von {remote}")
+    
+    # Initialisiere Latenz-Tracker
+    latency_tracker = LatencyTracker()
+    
+    # WebSocket-Monitore für Verbindungsüberwachung
+    talkdesk_monitor = WebSocketMonitor("Talkdesk-WS")
+    elevenlabs_monitor = WebSocketMonitor("ElevenLabs-WS")
 
     try:
+        # Starte Talkdesk-Monitor
+        await talkdesk_monitor.start_monitoring(websocket)
+        
         stream_sid = None
         # START-NACHRICHT PARSEN
+        latency_tracker.start("start_message_wait")
         for _ in range(5):
             try:
                 msg = await asyncio.wait_for(websocket.recv(), timeout=10)
+                talkdesk_monitor.record_received()
+                log_websocket_message("RECV-TALKDESK", msg)
+                
                 data = json.loads(msg)
                 if data.get("event") == "start":
                     stream_sid = data["start"].get("streamSid")
+                    latency_tracker.end("start_message_wait")
                     break
             except asyncio.TimeoutError:
                 logger.warning("Timeout beim Warten auf Start-Nachricht")
@@ -959,23 +1325,45 @@ async def handle_connection(websocket):
             return
 
         # ElevenLabs WebSocket-Verbindung herstellen
+        latency_tracker.start("elevenlabs_connection")
         signed_url = await get_elevenlabs_signed_url()
         if not signed_url:
             logger.error("Konnte keine Signed URL erhalten. Abbruch.")
             return
             
-        # Vereinfachte WebSocket-Verbindung zu ElevenLabs
-        el_ws = await websockets.connect(signed_url)
-        logger.info("WebSocket-Verbindung hergestellt")
+        # Verbesserte WebSocket-Verbindung zu ElevenLabs mit vollständigen Parametern
+        try:
+            el_ws = await websockets.connect(
+                signed_url,
+                ping_interval=20,  # Regelmäßige Ping-Nachrichten senden
+                ping_timeout=10,   # Timeout für Ping-Antworten
+                close_timeout=5    # Timeout für sauberes Schließen
+            )
+            # Füge Monitor als Attribut hinzu, damit send_with_confirmation darauf zugreifen kann
+            el_ws._monitor = elevenlabs_monitor
+            await elevenlabs_monitor.start_monitoring(el_ws)
+            
+            latency_tracker.end("elevenlabs_connection")
+            logger.info("WebSocket-Verbindung zu ElevenLabs hergestellt")
+        except Exception as e:
+            logger.error(f"Fehler beim Verbinden mit ElevenLabs: {e}", exc_info=True)
+            metrics.record_error("ElevenLabsConnectionError", str(e))
+            return
 
         # Initialisierung senden
         initial_config = build_initial_config()
+        latency_tracker.start("initial_config_send")
         await el_ws.send(json.dumps(initial_config))
+        elevenlabs_monitor.record_sent()
+        log_websocket_message("SENT-ELEVENLABS", initial_config)
         metrics.increment("packets_sent")
+        latency_tracker.end("initial_config_send")
         
         # Kontext-Manager initialisieren
         context_manager = ContextManager()
+        latency_tracker.start("context_creation")
         await context_manager.start_new_context(el_ws)
+        latency_tracker.end("context_creation")
 
         # TASKS STARTEN
         task1 = asyncio.create_task(stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager))
@@ -991,6 +1379,17 @@ async def handle_connection(websocket):
         # Bereinige verbleibende Tasks
         for task in pending:
             task.cancel()
+            
+        # Stoppe die WebSocket-Monitore
+        talkdesk_monitor.stop()
+        elevenlabs_monitor.stop()
+        
+        # Protokolliere Latenz-Statistiken
+        latency_stats = latency_tracker.get_stats()
+        if latency_stats:
+            logger.info("Latenz-Statistiken für diese Verbindung:")
+            for op_name, stats in latency_stats.items():
+                logger.info(f"  {op_name}: Avg={stats['avg']:.2f}ms, Min={stats['min']:.2f}ms, Max={stats['max']:.2f}ms, Count={stats['count']}")
             
         # Warte kurz, damit Logs geschrieben werden können
         await asyncio.sleep(0.5)
