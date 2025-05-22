@@ -570,19 +570,18 @@ class ContextManager:
                 }
                 
                 # Verwende send_with_confirmation mit kurzer Timeout-Zeit für schnelle Reaktion
-                sent_interruption = await send_with_confirmation(
+                # Das 'interruption'-Signal wird jetzt in send_with_confirmation als fire-and-forget behandelt
+                # und gibt immer True zurück, wenn das Senden selbst erfolgreich war.
+                # Wir müssen hier nicht mehr auf eine separate Bestätigung warten.
+                await send_with_confirmation(
                     ws, 
-                    interruption_msg,
-                    timeout=0.5,  # Kurzer Timeout für schnelle Reaktion
-                    max_retries=2  # Wenige Versuche für schnelle Reaktion
+                    interruption_msg 
+                    # expect_confirmation ist standardmäßig True, aber für type="interruption" wird es intern auf False gesetzt (bzw. es wird nicht gewartet)
                 )
-                
-                if sent_interruption:
-                    logger.info("Direktes Interruption-Signal gesendet und bestätigt")
-                else:
-                    logger.warning("Keine Bestätigung für Interruption-Signal erhalten")
-                
-                # 2. Sende sofort das Abort-Signal für den aktuellen Kontext
+                # Das Logging "Direktes Interruption-Signal gesendet" erfolgt jetzt innerhalb von send_with_confirmation.
+                                
+                # 2. Sende sofort das Abort-Signal für den aktuellen Kontext.
+                # Hier wollen wir auf eine Bestätigung warten, da es wichtig ist zu wissen, ob der Kontext wirklich abgebrochen wurde.
                 abort_msg = {
                     "type": "context_control",
                     "context_control": {
@@ -878,41 +877,77 @@ def log_websocket_message(direction, message, is_binary=False):
                 logger.debug(f"[{timestamp}] {direction} UNKNOWN: {type(message)}")
 
 # SEND WITH CONFIRMATION
-async def send_with_confirmation(ws, message, timeout=1.0, max_retries=3):
-    """Sendet eine Nachricht und wartet auf Bestätigung."""
+async def send_with_confirmation(ws, message, timeout=1.0, max_retries=3, expect_confirmation=True):
+    """Sendet eine Nachricht und wartet optional auf Bestätigung."""
     message_id = str(uuid.uuid4())
     confirmation_received = asyncio.Event()
     
-    # Erstelle eine Kopie der Nachricht mit message_id
-    if isinstance(message, dict):
-        message_with_id = message.copy()
-        message_with_id["message_id"] = message_id
-    else:
-        # Wenn es ein String ist, versuche ihn als JSON zu parsen
+    # Erstelle eine Kopie der Nachricht und füge message_id hinzu
+    # Stellt sicher, dass message_with_id immer ein Dict oder ein JSON-String ist
+    if isinstance(message, str):
         try:
             message_dict = json.loads(message)
-            message_dict["message_id"] = message_id
-            message_with_id = json.dumps(message_dict)
-        except:
-            # Wenn es kein gültiges JSON ist, können wir keine ID hinzufügen
-            logger.warning("Konnte keine message_id hinzufügen, da die Nachricht kein gültiges JSON ist")
-            message_with_id = message
-    
-    # Funktion zum Verarbeiten eingehender Nachrichten
-    def on_message(msg):
+        except json.JSONDecodeError:
+            logger.warning(f"Nachricht ist kein valides JSON, kann keine message_id hinzufügen: {message[:100]}...")
+            # Wenn keine Bestätigung erwartet wird, einfach senden
+            if not expect_confirmation:
+                await ws.send(message)
+                log_websocket_message("SENT (no-confirm)", message)
+                return True
+            # Ansonsten als Fehler behandeln, da wir ID für Bestätigung brauchen
+            logger.error("Kann Nachricht ohne message_id nicht mit Bestätigung senden.")
+            return False
+    elif isinstance(message, dict):
+        message_dict = message.copy()
+    else:
+        logger.error(f"Ungültiger Nachrichtentyp für send_with_confirmation: {type(message)}")
+        return False
+        
+    message_dict["message_id"] = message_id
+    message_with_id_str = json.dumps(message_dict)
+
+    # Spezielle Behandlung für 'interruption'-Nachrichten: Senden und nicht auf Bestätigung warten (oder sehr kurzer Timeout)
+    # Die ElevenLabs-Dokumentation legt nahe, dass 'interruption' ein Fire-and-Forget-Signal ist.
+    if message_dict.get("type") == "interruption":
+        logger.info(f"Sende 'interruption'-Signal {message_id} (fire-and-forget).")
+        await ws.send(message_with_id_str)
+        log_websocket_message("SENT (interruption)", message_dict)
+        # Wir setzen hier expect_confirmation außer Kraft, da für interruption keine explizite Bestätigung erwartet/benötigt wird
+        # um den Fluss nicht zu blockieren.
+        return True # Sofort als erfolgreich betrachten
+
+    if not expect_confirmation:
+        await ws.send(message_with_id_str)
+        log_websocket_message("SENT (no-confirm)", message_dict)
+        return True
+
+    # Funktion zum Verarbeiten eingehender Nachrichten für Bestätigungen
+    def on_message(msg_str):
         try:
-            if isinstance(msg, str):
-                data = json.loads(msg)
-            else:
-                data = msg
-                
-            # Prüfe auf Bestätigung
-            if (data.get("type") == "confirmation" or 
-                (data.get("type") == "context_control_response" and data.get("message_id") == message_id) or
-                (data.get("context_control_response", {}).get("message_id") == message_id)):
+            # msg_str sollte hier immer ein String sein, da WebSocket-Nachrichten als Text oder Bytes empfangen werden
+            # und log_websocket_message bereits eine JSON-Konvertierung versucht.
+            # Für die Bestätigungslogik parsen wir hier erneut, um sicher zu sein.
+            data = json.loads(msg_str)
+            
+            # Erweiterte Prüfung auf message_id in der Antwort
+            response_message_id = data.get("message_id")
+            if not response_message_id and data.get("type") == "context_control_response":
+                response_message_id = data.get("context_control_response", {}).get("message_id")
+            
+            if response_message_id == message_id:
+                logger.debug(f"Bestätigung für {message_id} durch Antwort-message_id erhalten. Typ: {data.get('type')}")
                 confirmation_received.set()
+            elif data.get("type") == "confirmation" and data.get("confirmed_message_id") == message_id: # Hypothetisches Feld
+                logger.debug(f"Bestätigung für {message_id} durch 'confirmation'-Typ erhalten.")
+                confirmation_received.set()
+            elif data.get("type") == "context_control_response" and not response_message_id:
+                 logger.warning(f"Context control response ohne message_id erhalten: {data}")
+
+
+        except json.JSONDecodeError:
+            logger.debug(f"Empfangene Nachricht für Bestätigungsprüfung ist kein JSON: {msg_str[:100]}...")
         except Exception as e:
-            logger.error(f"Fehler bei Bestätigungsverarbeitung: {e}")
+            logger.error(f"Fehler bei Bestätigungsverarbeitung für {message_id}: {e}", exc_info=True)
     
     # Temporären Handler für WebSocket-Monitor erstellen
     monitor = getattr(ws, '_monitor', None)
@@ -922,18 +957,14 @@ async def send_with_confirmation(ws, message, timeout=1.0, max_retries=3):
     # Nachricht senden und auf Bestätigung warten
     for attempt in range(max_retries):
         try:
-            # Nachricht als String oder Dict senden
-            if isinstance(message_with_id, dict):
-                await ws.send(json.dumps(message_with_id))
-            else:
-                await ws.send(message_with_id)
-                
-            log_websocket_message("SENT", message_with_id)
+            await ws.send(message_with_id_str)
+            # Loggen der gesendeten Nachricht (das Dict, nicht den String, für bessere Lesbarkeit im Log)
+            log_websocket_message("SENT", message_dict) 
             logger.debug(f"Nachricht gesendet (Versuch {attempt+1}/{max_retries}): {message_id}")
             
             try:
                 await asyncio.wait_for(confirmation_received.wait(), timeout=timeout)
-                logger.debug(f"Bestätigung für Nachricht {message_id} erhalten")
+                logger.info(f"Bestätigung für Nachricht {message_id} (Typ: {message_dict.get('type')}) erhalten.")
                 
                 # Handler entfernen
                 if monitor:
