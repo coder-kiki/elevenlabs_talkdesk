@@ -334,11 +334,17 @@ class SimpleVAD:
         self.energy_history_max_size = 10  # Anzahl der zu speichernden Energiewerte
         
     def update_background_energy(self, current_energy):
+        old_background = self.background_energy
         if self.background_energy is None:
             self.background_energy = current_energy
+            logger.info(f"Initialer Hintergrundpegel gesetzt: {self.background_energy:.6f}")
         else:
             # Langsame Anpassung an Hintergrundgeräusche
             self.background_energy = (1 - self.adaptation_rate) * self.background_energy + self.adaptation_rate * current_energy
+            
+            # Log significant changes in background energy
+            if abs(self.background_energy - old_background) > 0.01:
+                logger.info(f"Hintergrundpegel angepasst: {old_background:.6f} -> {self.background_energy:.6f} (Änderung: {self.background_energy - old_background:.6f})")
             
     def calculate_energy(self, audio_base64):
         try:
@@ -385,7 +391,20 @@ class SimpleVAD:
         if DEBUG_LOGGING and current_time - self.last_energy_log_time > self.energy_log_interval:
             self.last_energy_log_time = current_time
             bg_energy_str = f"{self.background_energy:.6f}" if self.background_energy is not None else "0.000000"
+            
+            # Berechne dynamischen Schwellenwert für besseres Logging
+            threshold_multiplier = 1.1
+            if agent_is_speaking:
+                threshold_multiplier = self.agent_speaking_sensitivity_factor
+                
+            dynamic_threshold = max(
+                self.energy_threshold * (0.9 if agent_is_speaking else 1.0),
+                self.background_energy * threshold_multiplier if self.background_energy else self.energy_threshold
+            )
+            
+            # Erweiterte Logging-Informationen
             logger.info(f"VAD: Energie={energy:.6f}, Schwelle={self.energy_threshold:.6f}, Hintergrund={bg_energy_str}")
+            logger.info(f"VAD: Dynamische Schwelle={dynamic_threshold:.6f}, Agent spricht={agent_is_speaking}, Benutzer spricht={self.is_speaking}")
         
         # Aktualisieren des Hintergrundgeräuschpegels, wenn keine Sprache erkannt wird
         if not self.is_speaking:
@@ -1122,6 +1141,17 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                         if speech_duration > 0.15:  # Reduziert von 0.2s für schnellere Reaktion
                                             logger.info(f"Direkte Unterbrechung: Benutzer spricht seit {speech_duration:.2f}s, Agent spricht seit {context_manager.agent_speaking_duration:.2f}s")
                                             # Sofortige Unterbrechung senden
+                                            # Sende explizites Interrupt-Signal an ElevenLabs
+                                            try:
+                                                interrupt_msg = {"type": "interruption"}
+                                                await el_ws.send(json.dumps(interrupt_msg))
+                                                logger.info("[WICHTIG] Explizites 'interruption'-Signal an ElevenLabs gesendet")
+                                                if elevenlabs_monitor:
+                                                    elevenlabs_monitor.record_sent()
+                                            except Exception as e:
+                                                logger.error(f"Fehler beim Senden des Interrupt-Signals: {e}")
+                                            
+                                            # Lokale Unterbrechungsbehandlung
                                             await context_manager.handle_interruption(el_ws)
                                 except Exception as e:
                                     logger.error(f"Fehler bei direkter Energieprüfung: {e}")
@@ -1165,11 +1195,23 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                         # Differenzierte Unterbrechungserkennung
                                         if speech_duration >= USER_LONG_INTERRUPTION_THRESHOLD:
                                             logger.info(f"Echte Unterbrechung erkannt (Dauer: {speech_duration:.2f}s >= {USER_LONG_INTERRUPTION_THRESHOLD}s). Stoppe Agenten-Audio.")
+                                            # Sende explizites Interrupt-Signal an ElevenLabs
+                                            try:
+                                                interrupt_msg = {"type": "interruption"}
+                                                await el_ws.send(json.dumps(interrupt_msg))
+                                                logger.info("[WICHTIG] Explizites 'interruption'-Signal an ElevenLabs gesendet für lange Unterbrechung")
+                                                if elevenlabs_monitor:
+                                                    elevenlabs_monitor.record_sent()
+                                            except Exception as e:
+                                                logger.error(f"Fehler beim Senden des Interrupt-Signals für lange Unterbrechung: {e}")
+                                            
+                                            # Lokale Unterbrechungsbehandlung
                                             context_manager.stop_agent_audio_output_immediately()
                                         elif speech_duration >= USER_SHORT_UTTERANCE_THRESHOLD: # Und implizit < LONG_INTERRUPTION_THRESHOLD
                                             logger.info(f"Kurze Benutzereinwendung erkannt (Dauer: {speech_duration:.2f}s). Agent wird NICHT unterbrochen.")
                                             # Hier könnte man optional eine Info an ElevenLabs senden, wenn deren API es unterstützt
-                                        # else: Äußerung ist kürzer als USER_SHORT_UTTERANCE_THRESHOLD, wird ignoriert (außer für VAD-Status)
+                                        else:
+                                            logger.info(f"Zu kurze Äußerung für Unterbrechung (Dauer: {speech_duration:.2f}s < {USER_SHORT_UTTERANCE_THRESHOLD}s)")
                             
                             # # Füge Audio zum Spracherkennungspuffer hinzu # Deaktiviert
                             # speech_recognizer.add_audio(payload) # Deaktiviert
@@ -1258,7 +1300,13 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                     elevenlabs_monitor.record_received()
                 log_websocket_message("RECV-ELEVENLABS", message_str)
                 
-                data = json.loads(message_str)
+                try:
+                    data = json.loads(message_str)
+                    message_type = data.get('type', 'N/A')
+                    
+                    # Besonderes Logging für potenzielle Interrupt-bezogene Nachrichten
+                    if message_type == "interruption" or "interrupt" in str(data).lower():
+                        logger.info(f"[WICHTIG] Potenzielle Interrupt-Nachricht von ElevenLabs erkannt: {json.dumps(data, indent=2)}")
                 
                 # Verarbeite Audio-Events
                 if data.get("type") == "audio":
