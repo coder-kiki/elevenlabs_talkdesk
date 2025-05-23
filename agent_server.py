@@ -161,7 +161,7 @@ WEBSOCKET_HOST = os.environ.get("WEBSOCKET_HOST", "0.0.0.0")
 WEBSOCKET_PORT = int(os.environ.get("WEBSOCKET_PORT", "8080"))
 VAD_ENERGY_THRESHOLD = float(os.environ.get("VAD_ENERGY_THRESHOLD", "0.0008"))  # Drastisch reduzierter Schwellenwert basierend auf tatsächlichen Energiewerten
 VAD_SPEECH_DURATION_THRESHOLD = float(os.environ.get("VAD_SPEECH_DURATION_THRESHOLD", "0.25"))  # Erhöht auf 0.25s gemäß Benutzerwunsch
-VAD_SILENCE_DURATION_THRESHOLD = float(os.environ.get("VAD_SILENCE_DURATION_THRESHOLD", "0.5"))
+VAD_SILENCE_DURATION_THRESHOLD = float(os.environ.get("VAD_SILENCE_DURATION_THRESHOLD", "0.4")) # Angepasst auf 0.4s gemäß Benutzerwunsch
 VAD_GRACE_PERIOD_AFTER_AGENT_STARTS = float(os.environ.get("VAD_GRACE_PERIOD_AFTER_AGENT_STARTS", "1.0")) # 1 Sekunde Schonfrist
 USER_SHORT_UTTERANCE_THRESHOLD = float(os.environ.get("USER_SHORT_UTTERANCE_THRESHOLD", "0.8")) # Kurze Äußerung
 USER_LONG_INTERRUPTION_THRESHOLD = float(os.environ.get("USER_LONG_INTERRUPTION_THRESHOLD", "1.2")) # Echte Unterbrechung, angepasst auf 1.2s
@@ -526,6 +526,8 @@ class ContextManager:
         self.audio_timeout = 0.5  # Wenn 0.5s kein Audio, dann spricht der Agent nicht mehr
         self.user_has_interrupted = False 
         self.agent_just_started_speaking_timestamp = None 
+        self.turn_latency_timestamps = {} # NEU für detailliertes Latenz-Tracking
+        self.current_turn_id = None # NEU
         
     @property
     def agent_speaking_duration(self):
@@ -598,6 +600,8 @@ class ContextManager:
     def agent_stopped_speaking(self):
         if self.is_agent_speaking:
             logger.info(f"Agent hat aufgehört zu sprechen (nach {self.agent_speaking_duration:.2f}s)")
+            self.log_turn_latencies() # Latenzen loggen, wenn Agent aufhört zu sprechen
+            self.current_turn_id = None # Turn für Latenzmessung abschließen
         
         self.is_agent_speaking = False
         self.agent_speaking_start_time = None
@@ -611,6 +615,41 @@ class ContextManager:
             logger.info("Benutzersprache (die eine Unterbrechung war) beendet. Setze user_has_interrupted=False.")
             self.user_has_interrupted = False
         # Ansonsten keine Aktion nötig, wenn keine Unterbrechung aktiv war.
+
+    def start_new_turn_latency_tracking(self):
+        self.current_turn_id = str(uuid.uuid4())
+        self.turn_latency_timestamps[self.current_turn_id] = {}
+        logger.info(f"Starte Latenz-Tracking für Turn: {self.current_turn_id}")
+
+    def record_latency_timestamp(self, event_name):
+        if self.current_turn_id and self.current_turn_id in self.turn_latency_timestamps:
+            self.turn_latency_timestamps[self.current_turn_id][event_name] = time.time()
+            logger.debug(f"Latenz-Zeitstempel für Turn {self.current_turn_id}: {event_name} = {self.turn_latency_timestamps[self.current_turn_id][event_name]:.4f}")
+
+    def log_turn_latencies(self):
+        if self.current_turn_id and self.current_turn_id in self.turn_latency_timestamps:
+            ts = self.turn_latency_timestamps[self.current_turn_id]
+            t0 = ts.get("T0_user_audio_last_chunk")
+            t1 = ts.get("T1_vad_user_speech_end")
+            t2 = ts.get("T2_user_input_end_sent")
+            t3 = ts.get("T3_user_transcript_received")
+            t4 = ts.get("T4_agent_response_text_received")
+            t5 = ts.get("T5_agent_first_audio_received")
+            t6 = ts.get("T6_agent_first_audio_sent_to_talkdesk")
+
+            logger.info(f"--- Latenz-Analyse für Turn {self.current_turn_id} ---")
+            if t0 and t1: logger.info(f"  VAD-Verzögerung (T1-T0): {(t1 - t0) * 1000:.2f} ms")
+            if t1 and t2: logger.info(f"  Signal-Sendezeit (T2-T1): {(t2 - t1) * 1000:.2f} ms")
+            if t2 and t3: logger.info(f"  ElevenLabs STT-Latenz (T3-T2): {(t3 - t2) * 1000:.2f} ms (inkl. Netzwerk)")
+            if t3 and t4: logger.info(f"  ElevenLabs LLM-Latenz (T4-T3): {(t4 - t3) * 1000:.2f} ms")
+            if t4 and t5: logger.info(f"  ElevenLabs TTS-Latenz (T5-T4): {(t5 - t4) * 1000:.2f} ms (Time To First Byte Audio)")
+            if t5 and t6: logger.info(f"  Server Audio-Weiterleitung (T6-T5): {(t6 - t5) * 1000:.2f} ms")
+            if t0 and t5: logger.info(f"  Gesamtlatenz (Benutzer-Ende bis Agent-Audio-Empfang, T5-T0): {(t5 - t0) * 1000:.2f} ms")
+            if t0 and t6: logger.info(f"  Gesamtlatenz (Benutzer-Ende bis Agent-Audio-Gesendet, T6-T0): {(t6 - t0) * 1000:.2f} ms")
+            logger.info(f"--- Ende Latenz-Analyse für Turn {self.current_turn_id} ---")
+            # Bereinige für den nächsten Turn, oder behalte Historie bei Bedarf
+            # del self.turn_latency_timestamps[self.current_turn_id] 
+            # self.current_turn_id = None
     
     def update_speaking_status(self, current_time):
         """Aktualisiert den Sprechstatus basierend auf der Zeit seit dem letzten Audio-Chunk"""
@@ -985,8 +1024,8 @@ async def get_elevenlabs_signed_url():
 # AUDIO BRIDGING MIT BARGE-IN UNTERSTÜTZUNG
 async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
     vad = SimpleVAD()
-    interruption_classifier = InterruptionClassifier()
-    speech_recognizer = SpeechRecognizer()
+    # interruption_classifier = InterruptionClassifier() # Deaktiviert
+    # speech_recognizer = SpeechRecognizer() # Deaktiviert
     speech_start_time = None
     last_status_check = time.time()
     status_check_interval = 0.5  # Alle 0.5 Sekunden den Sprechstatus prüfen
@@ -1004,14 +1043,15 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
     energy_stats_interval = 10.0  # Alle 10 Sekunden Energiestatistiken loggen
     
     # Spracherkennung
-    last_recognition_attempt = time.time()
-    recognition_attempt_interval = 0.5  # Alle 0.5 Sekunden versuchen, Sprache zu erkennen
+    # last_recognition_attempt = time.time() # Deaktiviert
+    # recognition_attempt_interval = 0.5  # Alle 0.5 Sekunden versuchen, Sprache zu erkennen # Deaktiviert
     
     try:
         while True:
             try:
                 # Empfange Nachricht von Talkdesk
                 message_str = await websocket.recv()
+                current_time = time.time() # Zeitstempel so früh wie möglich
                 
                 # Protokolliere empfangene Nachricht
                 if talkdesk_monitor:
@@ -1020,7 +1060,7 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                 
                 data = json.loads(message_str)
                 
-                current_time = time.time()
+                # T0 wird jetzt genauer gesetzt, wenn VAD Sprache zum ersten Mal erkennt.
                 
                 # Regelmäßige Überprüfung des Agent-Sprechstatus
                 if current_time - last_status_check > status_check_interval:
@@ -1090,7 +1130,11 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                             if is_voice_active:
                                 if speech_start_time is None:
                                     speech_start_time = current_time
-                                    logger.info("Benutzersprache erkannt (stream_talkdesk_to_elevenlabs)") # Eindeutiger machen
+                                    logger.info("Benutzersprache erkannt (stream_talkdesk_to_elevenlabs)")
+                                    # Starte Latenz-Tracking für diesen neuen User-Turn, falls noch nicht geschehen
+                                    if context_manager.current_turn_id is None:
+                                        context_manager.start_new_turn_latency_tracking()
+                                    context_manager.record_latency_timestamp("T0_vad_user_speech_start") # T0 ist jetzt VAD Start
                                 
                                 # Wenn Agent spricht, klassifiziere die Unterbrechung
                                 if context_manager.is_agent_speaking: # Agent spricht auch
@@ -1107,8 +1151,8 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                                 f"UserSpeechDuration: {speech_duration:.2f}s, "
                                                 f"ChunkEnergy: {current_chunk_energy:.6f}, "
                                                 f"AgentSpeakingDuration: {context_manager.agent_speaking_duration:.2f}s, "
-                                                f"AgentInPause: {context_manager.agent_in_pause}, "
-                                                f"LastUserText: '{interruption_classifier.last_speech_text}'")
+                                                f"AgentInPause: {context_manager.agent_in_pause}")
+                                                # f"LastUserText: '{interruption_classifier.last_speech_text}'") # Deaktiviert
                                     
                                     # VAD Schonfrist prüfen
                                     in_grace_period = False
@@ -1127,26 +1171,26 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                             # Hier könnte man optional eine Info an ElevenLabs senden, wenn deren API es unterstützt
                                         # else: Äußerung ist kürzer als USER_SHORT_UTTERANCE_THRESHOLD, wird ignoriert (außer für VAD-Status)
                             
-                            # Füge Audio zum Spracherkennungspuffer hinzu
-                            speech_recognizer.add_audio(payload)
+                            # # Füge Audio zum Spracherkennungspuffer hinzu # Deaktiviert
+                            # speech_recognizer.add_audio(payload) # Deaktiviert
                             
-                            # Versuche regelmäßig, Sprache zu erkennen
-                            if current_time - last_recognition_attempt >= recognition_attempt_interval:
-                                last_recognition_attempt = current_time
-                                recognized_text = await speech_recognizer.try_recognize(current_time)
-                                if recognized_text:
-                                    # Aktualisiere den Interruption Classifier mit dem erkannten Text
-                                    interruption_classifier.set_last_speech_text(recognized_text)
+                            # # Versuche regelmäßig, Sprache zu erkennen # Deaktiviert
+                            # if current_time - last_recognition_attempt >= recognition_attempt_interval: # Deaktiviert
+                            #     last_recognition_attempt = current_time # Deaktiviert
+                            #     recognized_text = await speech_recognizer.try_recognize(current_time) # Deaktiviert
+                            #     if recognized_text: # Deaktiviert
+                            #         # Aktualisiere den Interruption Classifier mit dem erkannten Text # Deaktiviert
+                            #         # interruption_classifier.set_last_speech_text(recognized_text) # Deaktiviert
                                     
-                                    # Wenn der Agent spricht, prüfe sofort, ob es eine Unterbrechung ist
-                                    if context_manager.is_agent_speaking and speech_start_time is not None:
-                                        speech_duration = current_time - speech_start_time
-                                        energy = vad.calculate_energy(payload)
+                            #         # Wenn der Agent spricht, prüfe sofort, ob es eine Unterbrechung ist # Deaktiviert
+                            #         if context_manager.is_agent_speaking and speech_start_time is not None: # Deaktiviert
+                            #             speech_duration = current_time - speech_start_time # Deaktiviert
+                            #             energy = vad.calculate_energy(payload) # Deaktiviert
                                         
-                                        # Die Klassifizierung und das Senden von Steuerbefehlen entfällt hier.
-                                        # Wir verlassen uns darauf, dass das Senden des User-Audios an ElevenLabs
-                                        # die serverseitige Logik für eine neue Antwort oder Korrektur auslöst.
-                                        logger.info(f"Text erkannt ('{recognized_text}') während Agent (vermutlich) schon gestoppt wurde (clientseitig). Sende Audio an ElevenLabs.")
+                            #             # Die Klassifizierung und das Senden von Steuerbefehlen entfällt hier. # Deaktiviert
+                            #             # Wir verlassen uns darauf, dass das Senden des User-Audios an ElevenLabs # Deaktiviert
+                            #             # die serverseitige Logik für eine neue Antwort oder Korrektur auslöst. # Deaktiviert
+                            #             logger.info(f"Text erkannt ('{recognized_text}') während Agent (vermutlich) schon gestoppt wurde (clientseitig). Sende Audio an ElevenLabs.") # Deaktiviert
 
                             # Audio an ElevenLabs senden
                             audio_msg = {"user_audio_chunk": payload}
@@ -1160,12 +1204,15 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                             if not vad.is_speaking and speech_start_time is not None: # Benutzer hat aufgehört zu sprechen
                                 user_speech_total_duration = current_time - speech_start_time
                                 logger.info(f"Benutzer hat aufgehört zu sprechen (Gesamtdauer: {user_speech_total_duration:.2f}s)")
+                                context_manager.record_latency_timestamp("T1_vad_user_speech_end")
                                 context_manager.user_speech_session_ended() # Wichtig: user_has_interrupted zurücksetzen
                                 
                                 # Sende "user_input_end" an ElevenLabs
                                 try:
                                     user_input_end_msg = {"type": "user_input_end"}
                                     await el_ws.send(json.dumps(user_input_end_msg))
+                                    # T2 wird hier gesetzt, NACHDEM die Nachricht erfolgreich gesendet wurde.
+                                    context_manager.record_latency_timestamp("T2_user_input_end_sent") 
                                     if elevenlabs_monitor:
                                         elevenlabs_monitor.record_sent()
                                     log_websocket_message("SENT-ELEVENLABS", user_input_end_msg)
@@ -1203,6 +1250,7 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
             try:
                 # Empfange Nachricht von ElevenLabs
                 message_str = await el_ws.recv()
+                current_time = time.time() # Zeitstempel so früh wie möglich
                 metrics.increment("packets_received")
                 
                 # Protokolliere empfangene Nachricht
@@ -1211,7 +1259,6 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                 log_websocket_message("RECV-ELEVENLABS", message_str)
                 
                 data = json.loads(message_str)
-                current_time = time.time()
                 
                 # Verarbeite Audio-Events
                 if data.get("type") == "audio":
@@ -1224,20 +1271,28 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                             # oder die VAD des Benutzers wieder Stille meldet und der Agent dann antwortet.
                         else:
                             # Keine aktive Unterbrechung: Agent darf sprechen (entweder erster Start oder Fortsetzung).
+                            if not context_manager.is_agent_speaking: # Nur beim ersten Audio-Chunk dieses Turns
+                                context_manager.record_latency_timestamp("T5_agent_first_audio_received")
                             context_manager.agent_started_speaking() # Setzt is_agent_speaking=True und user_has_interrupted=False
                             
-                            latency_tracker.start("audio_forward")
+                            # latency_tracker.start("audio_forward") # Altes Latenz-Tracking
                             talkdesk_msg = {
                                 "event": "media",
                                 "streamSid": stream_sid,
                                 "media": {"payload": b64_audio}
                             }
                             await websocket.send(json.dumps(talkdesk_msg))
+                            if not context_manager.turn_latency_timestamps.get(context_manager.current_turn_id, {}).get("T6_agent_first_audio_sent_to_talkdesk"):
+                                context_manager.record_latency_timestamp("T6_agent_first_audio_sent_to_talkdesk")
+                                context_manager.log_turn_latencies() # Logge Latenzen nach dem Senden des ersten Chunks
+                                # Starte neuen Turn für die nächste Benutzerinteraktion, falls dies der Abschluss eines Turns war
+                                # context_manager.start_new_turn_latency_tracking() # Besser in stream_talkdesk_to_elevenlabs, wenn Benutzer anfängt
+
                             if talkdesk_monitor:
                                 talkdesk_monitor.record_sent()
                             log_websocket_message("SENT-TALKDESK", talkdesk_msg)
                             metrics.increment("packets_sent")
-                            latency_tracker.end("audio_forward")
+                            # latency_tracker.end("audio_forward") # Altes Latenz-Tracking
                 
                 elif data.get("type") == "agent_response_correction":
                     correction_event = data.get("agent_response_correction_event", {})
@@ -1262,10 +1317,20 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                     if action == "abort" and success:
                         context_manager.agent_stopped_speaking() # Sicherstellen, dass der Status korrekt ist
                 
+                elif data.get("type") == "user_transcript":
+                    context_manager.record_latency_timestamp("T3_user_transcript_received")
+                    # Weitere Verarbeitung des Transkripts hier, falls nötig
+
+                elif data.get("type") == "agent_response":
+                    context_manager.record_latency_timestamp("T4_agent_response_text_received")
+                    # Weitere Verarbeitung der Textantwort hier, falls nötig
+
                 # Verarbeite End-Events
                 elif data.get("type") == "end":
                     logger.info("Ende des Streams von ElevenLabs")
                     context_manager.agent_stopped_speaking()
+                    context_manager.log_turn_latencies() # Logge Latenzen am Ende des Turns
+                    context_manager.current_turn_id = None # Turn abschließen
                 
                 # Verarbeite Bestätigungsnachrichten
                 elif data.get("type") == "confirmation":
