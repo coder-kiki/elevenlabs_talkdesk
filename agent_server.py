@@ -1308,20 +1308,20 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                     if message_type == "interruption" or "interrupt" in str(data).lower():
                         logger.info(f"[WICHTIG] Potenzielle Interrupt-Nachricht von ElevenLabs erkannt: {json.dumps(data, indent=2)}")
                 
-                # Verarbeite Audio-Events
-                if data.get("type") == "audio":
-                    b64_audio = data.get("audio_event", {}).get("audio_base_64")
-                    if b64_audio:
-                        # Prüfe, ob eine aktive Benutzerunterbrechung vorliegt
-                        if context_manager.user_has_interrupted:
-                            logger.info(f"RECV-ELEVENLABS: Audio-Event empfangen, aber Agent wurde gerade vom Benutzer unterbrochen (user_has_interrupted=True). Verwerfe {len(b64_audio)} Bytes Audio.")
-                            # Das Flag user_has_interrupted bleibt True, bis der Agent legitim neu mit einer Antwort beginnt
-                            # oder die VAD des Benutzers wieder Stille meldet und der Agent dann antwortet.
-                        else:
-                            # Keine aktive Unterbrechung: Agent darf sprechen (entweder erster Start oder Fortsetzung).
-                            if not context_manager.is_agent_speaking: # Nur beim ersten Audio-Chunk dieses Turns
-                                context_manager.record_latency_timestamp("T5_agent_first_audio_received")
-                            context_manager.agent_started_speaking() # Setzt is_agent_speaking=True und user_has_interrupted=False
+                    # Verarbeite Audio-Events
+                    if data.get("type") == "audio":
+                        b64_audio = data.get("audio_event", {}).get("audio_base_64")
+                        if b64_audio:
+                            # Prüfe, ob eine aktive Benutzerunterbrechung vorliegt
+                            if context_manager.user_has_interrupted:
+                                logger.info(f"RECV-ELEVENLABS: Audio-Event empfangen, aber Agent wurde gerade vom Benutzer unterbrochen (user_has_interrupted=True). Verwerfe {len(b64_audio)} Bytes Audio.")
+                                # Das Flag user_has_interrupted bleibt True, bis der Agent legitim neu mit einer Antwort beginnt
+                                # oder die VAD des Benutzers wieder Stille meldet und der Agent dann antwortet.
+                            else:
+                                # Keine aktive Unterbrechung: Agent darf sprechen (entweder erster Start oder Fortsetzung).
+                                if not context_manager.is_agent_speaking: # Nur beim ersten Audio-Chunk dieses Turns
+                                    context_manager.record_latency_timestamp("T5_agent_first_audio_received")
+                                context_manager.agent_started_speaking() # Setzt is_agent_speaking=True und user_has_interrupted=False
                             
                             # latency_tracker.start("audio_forward") # Altes Latenz-Tracking
                             talkdesk_msg = {
@@ -1342,66 +1342,66 @@ async def stream_elevenlabs_to_talkdesk(websocket, el_ws, stream_sid, context_ma
                             metrics.increment("packets_sent")
                             # latency_tracker.end("audio_forward") # Altes Latenz-Tracking
                 
-                elif data.get("type") == "agent_response_correction":
-                    correction_event = data.get("agent_response_correction_event", {})
-                    original_response = correction_event.get("original_agent_response")
-                    corrected_response = correction_event.get("corrected_agent_response")
-                    logger.info(f"Agentenantwort-Korrektur erhalten. Original: '{original_response}', Korrigiert: '{corrected_response}'")
-                    # Stoppe die aktuelle Audiowiedergabe des Agenten, da eine Korrektur bedeutet, dass eine Unterbrechung stattgefunden hat.
-                    # Dies ist eine zusätzliche Sicherheit, falls das clientseitige Stoppen in stream_talkdesk_to_elevenlabs nicht ausreicht
-                    # oder falls ElevenLabs die Unterbrechung rein serverseitig erkennt und dieses Event sendet.
-                    context_manager.stop_agent_audio_output_immediately()
-                    # Hier müsste idealerweise die Audio-Queue für TalkDesk geleert werden.
-                    # TODO: Implementiere Mechanismus zum Leeren der TalkDesk-Audio-Queue.
+                    elif data.get("type") == "agent_response_correction":
+                        correction_event = data.get("agent_response_correction_event", {})
+                        original_response = correction_event.get("original_agent_response")
+                        corrected_response = correction_event.get("corrected_agent_response")
+                        logger.info(f"Agentenantwort-Korrektur erhalten. Original: '{original_response}', Korrigiert: '{corrected_response}'")
+                        # Stoppe die aktuelle Audiowiedergabe des Agenten, da eine Korrektur bedeutet, dass eine Unterbrechung stattgefunden hat.
+                        # Dies ist eine zusätzliche Sicherheit, falls das clientseitige Stoppen in stream_talkdesk_to_elevenlabs nicht ausreicht
+                        # oder falls ElevenLabs die Unterbrechung rein serverseitig erkennt und dieses Event sendet.
+                        context_manager.stop_agent_audio_output_immediately()
+                        # Hier müsste idealerweise die Audio-Queue für TalkDesk geleert werden.
+                        # TODO: Implementiere Mechanismus zum Leeren der TalkDesk-Audio-Queue.
 
-                # Verarbeite Kontext-Events (obwohl wir sie nicht mehr aktiv senden, loggen wir, falls sie kommen)
-                elif data.get("type") == "context_control_response":
-                    control_response = data.get("context_control_response", {})
-                    action = control_response.get("action")
-                    success = control_response.get("success", False)
-                    message_id = control_response.get("message_id", "unknown")
+                    # Verarbeite Kontext-Events (obwohl wir sie nicht mehr aktiv senden, loggen wir, falls sie kommen)
+                    elif data.get("type") == "context_control_response":
+                        control_response = data.get("context_control_response", {})
+                        action = control_response.get("action")
+                        success = control_response.get("success", False)
+                        message_id = control_response.get("message_id", "unknown")
                     
-                    logger.info(f"Unerwartete Context-Control-Response empfangen: Aktion={action}, Erfolg={success}, ID={message_id}")
-                    if action == "abort" and success:
-                        context_manager.agent_stopped_speaking() # Sicherstellen, dass der Status korrekt ist
+                        logger.info(f"Unerwartete Context-Control-Response empfangen: Aktion={action}, Erfolg={success}, ID={message_id}")
+                        if action == "abort" and success:
+                            context_manager.agent_stopped_speaking() # Sicherstellen, dass der Status korrekt ist
                 
-                elif data.get("type") == "user_transcript":
-                    context_manager.record_latency_timestamp("T3_user_transcript_received")
-                    # Weitere Verarbeitung des Transkripts hier, falls nötig
+                    elif data.get("type") == "user_transcript":
+                        context_manager.record_latency_timestamp("T3_user_transcript_received")
+                        # Weitere Verarbeitung des Transkripts hier, falls nötig
 
-                elif data.get("type") == "agent_response":
-                    context_manager.record_latency_timestamp("T4_agent_response_text_received")
-                    # Weitere Verarbeitung der Textantwort hier, falls nötig
+                    elif data.get("type") == "agent_response":
+                        context_manager.record_latency_timestamp("T4_agent_response_text_received")
+                        # Weitere Verarbeitung der Textantwort hier, falls nötig
 
-                # Verarbeite End-Events
-                elif data.get("type") == "end":
-                    logger.info("Ende des Streams von ElevenLabs")
-                    context_manager.agent_stopped_speaking()
-                    context_manager.log_turn_latencies() # Logge Latenzen am Ende des Turns
-                    context_manager.current_turn_id = None # Turn abschließen
-                
-                # Verarbeite Bestätigungsnachrichten
-                elif data.get("type") == "confirmation":
-                    logger.debug(f"Bestätigung erhalten: {data.get('message_id', 'unknown')}")
-                
-                # Verarbeite andere Nachrichtentypen
-                elif data.get("type") == "conversation_initiation_metadata":
-                    logger.info("RECV-ELEVENLABS: 'conversation_initiation_metadata' empfangen und verarbeitet (geloggt).")
-                    # Keine weitere Aktion hier nötig, Audio-Events werden separat behandelt.
-                else:
-                    logger.debug(f"Unbekannter Nachrichtentyp von ElevenLabs: {data.get('type', 'unknown')}")
+                    # Verarbeite End-Events
+                    elif data.get("type") == "end":
+                        logger.info("Ende des Streams von ElevenLabs")
+                        context_manager.agent_stopped_speaking()
+                        context_manager.log_turn_latencies() # Logge Latenzen am Ende des Turns
+                        context_manager.current_turn_id = None # Turn abschließen
                     
-            except ConnectionClosed:
-                logger.info("ElevenLabs WebSocket-Verbindung geschlossen")
-                break
+                    # Verarbeite Bestätigungsnachrichten
+                    elif data.get("type") == "confirmation":
+                        logger.debug(f"Bestätigung erhalten: {data.get('message_id', 'unknown')}")
+                    
+                    # Verarbeite andere Nachrichtentypen
+                    elif data.get("type") == "conversation_initiation_metadata":
+                        logger.info("RECV-ELEVENLABS: 'conversation_initiation_metadata' empfangen und verarbeitet (geloggt).")
+                        # Keine weitere Aktion hier nötig, Audio-Events werden separat behandelt.
+                    else:
+                        logger.debug(f"Unbekannter Nachrichtentyp von ElevenLabs: {data.get('type', 'unknown')}")
+                    
+                except ConnectionClosed:
+                    logger.info("ElevenLabs WebSocket-Verbindung geschlossen")
+                    break
+                except Exception as e:
+                    logger.error(f"Fehler beim Verarbeiten der ElevenLabs-Nachricht: {e}")
+                    metrics.record_error("ElevenLabsMessageError", str(e))
+                    # Versuche weiterzumachen
+                    await asyncio.sleep(0.1)
             except Exception as e:
-                logger.error(f"Fehler beim Verarbeiten der ElevenLabs-Nachricht: {e}")
-                metrics.record_error("ElevenLabsMessageError", str(e))
-                # Versuche weiterzumachen
-                await asyncio.sleep(0.1)
-    except Exception as e:
-        logger.error(f"Fehler in stream_elevenlabs_to_talkdesk: {e}", exc_info=True)
-        metrics.record_error("ElevenLabsToTalkdeskError", str(e))
+                logger.error(f"Fehler in stream_elevenlabs_to_talkdesk: {e}", exc_info=True)
+                metrics.record_error("ElevenLabsToTalkdeskError", str(e))
 
 # REFAKTORIERTER CONNECTION HANDLER
 async def handle_connection(websocket):
