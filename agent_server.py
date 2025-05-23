@@ -164,7 +164,7 @@ VAD_SPEECH_DURATION_THRESHOLD = float(os.environ.get("VAD_SPEECH_DURATION_THRESH
 VAD_SILENCE_DURATION_THRESHOLD = float(os.environ.get("VAD_SILENCE_DURATION_THRESHOLD", "0.5"))
 VAD_GRACE_PERIOD_AFTER_AGENT_STARTS = float(os.environ.get("VAD_GRACE_PERIOD_AFTER_AGENT_STARTS", "1.0")) # 1 Sekunde Schonfrist
 USER_SHORT_UTTERANCE_THRESHOLD = float(os.environ.get("USER_SHORT_UTTERANCE_THRESHOLD", "0.8")) # Kurze Äußerung
-USER_LONG_INTERRUPTION_THRESHOLD = float(os.environ.get("USER_LONG_INTERRUPTION_THRESHOLD", "1.5")) # Echte Unterbrechung
+USER_LONG_INTERRUPTION_THRESHOLD = float(os.environ.get("USER_LONG_INTERRUPTION_THRESHOLD", "1.2")) # Echte Unterbrechung, angepasst auf 1.2s
 LOG_INTERVAL = int(os.environ.get("LOG_INTERVAL", "300"))  # 5 Minuten
 DEBUG_LOGGING = os.environ.get("DEBUG_LOGGING", "true").lower() == "true"  # Detaillierte Logs aktivieren
 USE_SPEECH_RECOGNITION = os.environ.get("USE_SPEECH_RECOGNITION", "true").lower() == "true"  # Spracherkennung für bessere Unterbrechungserkennung
@@ -1161,6 +1161,18 @@ async def stream_talkdesk_to_elevenlabs(websocket, el_ws, context_manager):
                                 user_speech_total_duration = current_time - speech_start_time
                                 logger.info(f"Benutzer hat aufgehört zu sprechen (Gesamtdauer: {user_speech_total_duration:.2f}s)")
                                 context_manager.user_speech_session_ended() # Wichtig: user_has_interrupted zurücksetzen
+                                
+                                # Sende "user_input_end" an ElevenLabs
+                                try:
+                                    user_input_end_msg = {"type": "user_input_end"}
+                                    await el_ws.send(json.dumps(user_input_end_msg))
+                                    if elevenlabs_monitor:
+                                        elevenlabs_monitor.record_sent()
+                                    log_websocket_message("SENT-ELEVENLABS", user_input_end_msg)
+                                    logger.info("Signal 'user_input_end' an ElevenLabs gesendet.")
+                                except Exception as e:
+                                    logger.error(f"Fehler beim Senden von 'user_input_end': {e}")
+
                                 speech_start_time = None # Redezeit des Benutzers für den nächsten Turn zurücksetzen
                         except Exception as chunk_error:
                             logger.error(f"Fehler bei Audio-Chunk-Verarbeitung: {chunk_error}")
