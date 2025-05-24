@@ -1,0 +1,3834 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2822
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 ---\
+title: Conversational AI overview\
+headline: Introduction - Conversational voice AI agents\
+subtitle: 'Deploy customized, conversational voice agents in minutes.'\
+---\
+\
+<div style=\{\{ position: 'relative', width: '100%', paddingBottom: '56.25%' \}\}>\
+  <iframe\
+    src="https://player.vimeo.com/video/1029660636"\
+    frameBorder="0"\
+    style=\{\{ position: 'absolute', top: '0', left: '0', width: '100%', height: '100%' \}\}\
+    className="aspect-video w-full rounded-lg"\
+    allow="autoplay; fullscreen; picture-in-picture"\
+    allowFullScreen\
+  />\
+</div>\
+\
+## What is Conversational AI?\
+\
+ElevenLabs [Conversational AI](https://elevenlabs.io/conversational-ai) is a platform for deploying customized, conversational voice agents. Built in response to our customers' needs, our platform eliminates months of development time typically spent building conversation stacks from scratch. It combines these building blocks:\
+\
+<CardGroup cols=\{2\}>\
+  <Card title="Speech to text">\
+    Our fine tuned ASR model that transcribes the caller's dialogue.\
+  </Card>\
+  <Card title="Language model">\
+    Choose from Gemini, Claude, OpenAI and more, or bring your own.\
+  </Card>\
+  <Card title="Text to speech">\
+    Our low latency, human-like TTS across 5k+ voices and 31 languages.\
+  </Card>\
+  <Card title="Turn taking model">\
+    Our custom turn taking model that understands when to speak, like a human would.\
+  </Card>\
+</CardGroup>\
+\
+Altogether it is a highly composable AI Voice agent solution that can scale to thousands of calls per day. With [server](/docs/conversational-ai/customization/tools/server-tools) & [client side](/docs/conversational-ai/customization/tools/client-tools) tools, [knowledge](/docs/conversational-ai/customization/knowledge-base) bases, [dynamic](/docs/conversational-ai/customization/personalization/dynamic-variables) agent instantiation and [overrides](/docs/conversational-ai/customization/personalization/overrides), plus built-in monitoring, it's the complete developer toolkit.\
+\
+<Card title="Pricing" horizontal>\
+  15 minutes to get started on the free plan. Get 13,750 minutes included on the Business plan at\
+  \\$0.08 per minute on the Business plan, with extra minutes billed at \\$0.08, as well as\
+  significantly discounted pricing at higher volumes.\
+  <br />\
+  **Setup & Prompt Testing**: billed at half the cost.\
+</Card>\
+\
+<Note>\
+  Usage is billed to the account that created the agent. If authentication is not enabled, anybody\
+  with your agent's id can connect to it and consume your credits. To protect against this, either\
+  enable authentication for your agent or handle the agent id as a secret.\
+</Note>\
+\
+## Pricing tiers\
+\
+<Tabs>\
+  <Tab title="In Minutes">\
+  \
+  | Tier     | Price   | Minutes included | Cost per extra minute              |\
+  | -------- | ------- | ---------------- | ---------------------------------- |\
+  | Free     | \\$0     | 15               | Unavailable                        |\
+  | Starter  | \\$5     | 50               | Unavailable                        |\
+  | Creator  | \\$22    | 250              | ~\\$0.12                            |\
+  | Pro      | \\$99    | 1100             | ~\\$0.11                            |\
+  | Scale    | \\$330   | 3,600            | ~\\$0.10                            |\
+  | Business | \\$1,320 | 13,750           | \\$0.08 (annual), \\$0.096 (monthly) |\
+\
+  </Tab>\
+  <Tab title="In Credits">\
+  \
+  | Tier     | Price   | Credits included | Cost in credits per extra minute |\
+  | -------- | ------- | ---------------- | -------------------------------- |\
+  | Free     | \\$0     | 10,000           | Unavailable                      |\
+  | Starter  | \\$5     | 30,000           | Unavailable                      |\
+  | Creator  | \\$22    | 100,000          | 400                              |\
+  | Pro      | \\$99    | 500,000          | 454                              |\
+  | Scale    | \\$330   | 2,000,000        | 555                              |\
+  | Business | \\$1,320 | 11,000,000       | 800                              |\
+\
+  </Tab>\
+</Tabs>\
+\
+<Note>\
+  Today we're covering the LLM costs, though these will be passed through to customers in the\
+  future.\
+</Note>\
+\
+### Pricing during silent periods\
+\
+When a conversation is silent for longer than ten seconds, ElevenLabs reduces the inference of the turn-taking model and speech-to-text services until voice activity is detected again. This optimization means that extended periods of silence are charged at 5% of the usual per-minute cost.\
+\
+This reduction in cost:\
+\
+- Only applies to the period of silence.\
+- Does not apply after voice activity is detected again.\
+- Can be triggered at multiple times in the same conversation.\
+\
+## Models\
+\
+Currently, the following models are natively supported and can be configured via the agent settings:\
+\
+- Gemini 2.0 Flash\
+- Gemini 1.5 Flash\
+- Gemini 1.5 Pro\
+- Gemini 1.0 Pro\
+- GPT-4o Mini\
+- GPT-4o\
+- GPT-4 Turbo\
+- GPT-3.5 Turbo\
+- Claude 3.5 Sonnet\
+- Claude 3 Haiku\
+\
+![Supported models](file:72157348-cbbf-47bb-b400-d854491cfe43)\
+\
+You can start with our [free tier](https://elevenlabs.io/app/sign-up), which includes 15 minutes of conversation per month.\
+\
+Need more? Upgrade to a [paid plan](https://elevenlabs.io/pricing/api) instantly - no sales calls required. For enterprise usage (6+ hours of daily conversation), [contact our sales team](https://elevenlabs.io/contact-sales) for custom pricing tailored to your needs.\
+\
+## Popular applications\
+\
+Companies and creators use our Conversational AI orchestration platform to create:\
+\
+- **Customer service**: Assistants trained on company documentation that can handle customer queries, troubleshoot issues, and provide 24/7 support in multiple languages.\
+- **Virtual assistants**: Assistants trained to manage scheduling, set reminders, look up information, and help users stay organized throughout their day.\
+- **Retail support**: Assistants that help customers find products, provide personalized recommendations, track orders, and answer product-specific questions.\
+- **Personalized learning**: Assistants that help students learn new topics & enhance reading comprehension by speaking with books and [articles](https://elevenlabs.io/blog/time-brings-conversational-ai-to-journalism).\
+\
+<Note>\
+  Ready to get started? Check out our [quickstart guide](/docs/conversational-ai/quickstart) to\
+  create your first AI agent in minutes.\
+</Note>\
+\
+## FAQ\
+\
+<AccordionGroup>\
+  <Accordion title="Concurrency limits">\
+Plan limits\
+\
+Your subscription plan determines how many calls can be made simultaneously.\
+\
+| Plan       | Concurrency limit |\
+| ---------- | ----------------- |\
+| Free       | 4                 |\
+| Starter    | 6                 |\
+| Creator    | 10                |\
+| Pro        | 20                |\
+| Scale      | 30                |\
+| Business   | 30                |\
+| Enterprise | Elevated          |\
+\
+    <Note>\
+      To increase your concurrency limit [upgrade your subscription plan](https://elevenlabs.io/pricing/api)\
+      or [contact sales](https://elevenlabs.io/contact-sales) to discuss enterprise plans.\
+    </Note>\
+\
+  </Accordion>\
+  <Accordion title="Supported audio formats">\
+    The following audio output formats are supported in the Conversational AI platform:\
+\
+    - PCM (8 kHz / 16 kHz / 22.05 kHz / 24 kHz / 44.1 kHz)\
+    - \uc0\u956 -law 8000Hz\
+\
+  </Accordion>\
+</AccordionGroup>\
+\
+\
+---\
+title: Events\
+subtitle: >-\
+  Understand real-time communication events exchanged between client and server\
+  in conversational AI.\
+---\
+\
+## Overview\
+\
+Events are the foundation of real-time communication in conversational AI applications using WebSockets.\
+They facilitate the exchange of information like audio streams, transcriptions, agent responses, and contextual updates between the client application and the server infrastructure.\
+\
+Understanding these events is crucial for building responsive and interactive conversational experiences.\
+\
+Events are broken down into two categories:\
+\
+<CardGroup cols=\{2\}>\
+  <Card\
+    title="Client Events (Server-to-Client)"\
+    href="/conversational-ai/customization/events/client-events"\
+    icon="cloud-arrow-down"\
+  >\
+    Events sent from the server to the client, delivering audio, transcripts, agent messages, and\
+    system signals.\
+  </Card>\
+  <Card\
+    title="Client-to-Server Events"\
+    href="/conversational-ai/customization/events/client-to-server-events"\
+    icon="cloud-arrow-up"\
+  >\
+    Events sent from the client to the server, providing contextual updates or responding to server\
+    requests.\
+  </Card>\
+</CardGroup>\
+---\
+title: Client events\
+subtitle: >-\
+  Understand and handle real-time events received by the client during\
+  conversational applications.\
+---\
+\
+**Client events** are system-level events sent from the server to the client that facilitate real-time communication. These events deliver audio, transcription, agent responses, and other critical information to the client application.\
+\
+<Note>\
+  For information on events you can send from the client to the server, see the [Client-to-server\
+  events](/docs/conversational-ai/customization/events/client-to-server-events) documentation.\
+</Note>\
+\
+## Overview\
+\
+Client events are essential for maintaining the real-time nature of conversations. They provide everything from initialization metadata to processed audio and agent responses.\
+\
+<Info>\
+  These events are part of the WebSocket communication protocol and are automatically handled by our\
+  SDKs. Understanding them is crucial for advanced implementations and debugging.\
+</Info>\
+\
+## Client event types\
+\
+<AccordionGroup>\
+  <Accordion title="conversation_initiation_metadata">\
+    - Automatically sent when starting a conversation\
+    - Initializes conversation settings and parameters\
+\
+    ```javascript\
+    // Example initialization metadata\
+    \{\
+      "type": "conversation_initiation_metadata",\
+      "conversation_initiation_metadata_event": \{\
+        "conversation_id": "conv_123",\
+        "agent_output_audio_format": "pcm_44100",  // TTS output format\
+        "user_input_audio_format": "pcm_16000"    // ASR input format\
+      \}\
+    \}\
+    ```\
+\
+  </Accordion>\
+\
+  <Accordion title="ping">\
+    - Health check event requiring immediate response\
+    - Automatically handled by SDK\
+    - Used to maintain WebSocket connection\
+\
+      ```javascript\
+      // Example ping event structure\
+      \{\
+        "ping_event": \{\
+          "event_id": 123456,\
+          "ping_ms": 50  // Optional, estimated latency in milliseconds\
+        \},\
+        "type": "ping"\
+      \}\
+      ```\
+\
+      ```javascript\
+      // Example ping handler\
+      websocket.on('ping', () => \{\
+        websocket.send('pong');\
+      \});\
+      ```\
+\
+  </Accordion>\
+\
+  <Accordion title="audio">\
+    - Contains base64 encoded audio for playback\
+    - Includes numeric event ID for tracking and sequencing\
+    - Handles voice output streaming\
+    \
+    ```javascript\
+    // Example audio event structure\
+    \{\
+      "audio_event": \{\
+        "audio_base_64": "base64_encoded_audio_string",\
+        "event_id": 12345\
+      \},\
+      "type": "audio"\
+    \}\
+    ```\
+\
+    ```javascript\
+    // Example audio event handler\
+    websocket.on('audio', (event) => \{\
+      const \{ audio_event \} = event;\
+      const \{ audio_base_64, event_id \} = audio_event;\
+      audioPlayer.play(audio_base_64);\
+    \});\
+    ```\
+\
+  </Accordion>\
+\
+  <Accordion title="user_transcript">\
+    - Contains finalized speech-to-text results\
+    - Represents complete user utterances\
+    - Used for conversation history\
+\
+    ```javascript\
+    // Example transcript event structure\
+    \{\
+      "type": "user_transcript",\
+      "user_transcription_event": \{\
+        "user_transcript": "Hello, how can you help me today?"\
+      \}\
+    \}\
+    ```\
+\
+    ```javascript\
+    // Example transcript handler\
+    websocket.on('user_transcript', (event) => \{\
+      const \{ user_transcription_event \} = event;\
+      const \{ user_transcript \} = user_transcription_event;\
+      updateConversationHistory(user_transcript);\
+    \});\
+    ```\
+\
+  </Accordion>\
+\
+  <Accordion title="agent_response">\
+    - Contains complete agent message\
+    - Sent with first audio chunk\
+    - Used for display and history\
+\
+    ```javascript\
+    // Example response event structure\
+    \{\
+      "type": "agent_response",\
+      "agent_response_event": \{\
+        "agent_response": "Hello, how can I assist you today?"\
+      \}\
+    \}\
+    ```\
+\
+    ```javascript\
+    // Example response handler\
+    websocket.on('agent_response', (event) => \{\
+      const \{ agent_response_event \} = event;\
+      const \{ agent_response \} = agent_response_event;\
+      displayAgentMessage(agent_response);\
+    \});\
+    ```\
+\
+  </Accordion>\
+\
+  <Accordion title="agent_response_correction">\
+    - Contains truncated response after interruption\
+      - Updates displayed message\
+      - Maintains conversation accuracy\
+\
+    ```javascript\
+    // Example response correction event structure\
+    \{\
+      "type": "agent_response_correction",\
+      "agent_response_correction_event": \{\
+        "original_agent_response": "Let me tell you about the complete history...",\
+        "corrected_agent_response": "Let me tell you about..."  // Truncated after interruption\
+      \}\
+    \}\
+    ```\
+\
+    ```javascript\
+    // Example response correction handler\
+    websocket.on('agent_response_correction', (event) => \{\
+      const \{ agent_response_correction_event \} = event;\
+      const \{ corrected_agent_response \} = agent_response_correction_event;\
+      displayAgentMessage(corrected_agent_response);\
+    \});\
+    ```\
+\
+  </Accordion>\
+\
+  <Accordion title="client_tool_call">\
+    - Represents a function call the agent wants the client to execute\
+    - Contains tool name, tool call ID, and parameters\
+    - Requires client-side execution of the function and sending the result back to the server\
+\
+    <Info>\
+      If you are using the SDK, callbacks are provided to handle sending the result back to the server.\
+    </Info>\
+\
+    ```javascript\
+    // Example tool call event structure\
+    \{\
+      "type": "client_tool_call",\
+      "client_tool_call": \{\
+        "tool_name": "search_database",\
+        "tool_call_id": "call_123456",\
+        "parameters": \{\
+          "query": "user information",\
+          "filters": \{\
+            "date": "2024-01-01"\
+          \}\
+        \}\
+      \}\
+    \}\
+    ```\
+\
+    ```javascript\
+    // Example tool call handler\
+    websocket.on('client_tool_call', async (event) => \{\
+      const \{ client_tool_call \} = event;\
+      const \{ tool_name, tool_call_id, parameters \} = client_tool_call;\
+\
+      try \{\
+        const result = await executeClientTool(tool_name, parameters);\
+        // Send success response back to continue conversation\
+        websocket.send(\{\
+          type: "client_tool_result",\
+          tool_call_id: tool_call_id,\
+          result: result,\
+          is_error: false\
+        \});\
+      \} catch (error) \{\
+        // Send error response if tool execution fails\
+        websocket.send(\{\
+          type: "client_tool_result",\
+          tool_call_id: tool_call_id,\
+          result: error.message,\
+          is_error: true\
+        \});\
+      \}\
+    \});\
+    ```\
+\
+  </Accordion>\
+  <Accordion title="vad_score">\
+    - Voice Activity Detection score event\
+    - Indicates the probability that the user is speaking\
+    - Values range from 0 to 1, where higher values indicate higher confidence of speech\
+\
+    ```javascript\
+    // Example VAD score event\
+    \{\
+      "type": "vad_score",\
+      "vad_score_event": \{\
+        "vad_score": 0.95\
+      \}\
+    \}\
+    ```\
+\
+  </Accordion>\
+</AccordionGroup>\
+\
+## Event flow\
+\
+Here's a typical sequence of events during a conversation:\
+\
+```mermaid\
+sequenceDiagram\
+    participant Client\
+    participant Server\
+\
+    Server->>Client: conversation_initiation_metadata\
+    Note over Client,Server: Connection established\
+    Server->>Client: ping\
+    Client->>Server: pong\
+    Server->>Client: audio\
+    Note over Client: Playing audio\
+    Note over Client: User responds\
+    Server->>Client: user_transcript\
+    Server->>Client: agent_response\
+    Server->>Client: audio\
+    Server->>Client: client_tool_call\
+    Note over Client: Client tool runs\
+    Client->>Server: client_tool_result\
+    Server->>Client: agent_response\
+    Server->>Client: audio\
+    Note over Client: Playing audio\
+    Note over Client: Interruption detected\
+    Server->>Client: agent_response_correction\
+\
+```\
+\
+### Best practices\
+\
+1. **Error handling**\
+\
+   - Implement proper error handling for each event type\
+   - Log important events for debugging\
+   - Handle connection interruptions gracefully\
+\
+2. **Audio management**\
+\
+   - Buffer audio chunks appropriately\
+   - Implement proper cleanup on interruption\
+   - Handle audio resource management\
+\
+3. **Connection management**\
+\
+   - Respond to PING events promptly\
+   - Implement reconnection logic\
+   - Monitor connection health\
+\
+## Troubleshooting\
+\
+<AccordionGroup>\
+  <Accordion title="Connection issues">\
+\
+    - Ensure proper WebSocket connection\
+    - Check PING/PONG responses\
+    - Verify API credentials\
+\
+  </Accordion>\
+  <Accordion title="Audio problems">\
+\
+    - Check audio chunk handling\
+    - Verify audio format compatibility\
+    - Monitor memory usage\
+\
+  </Accordion>\
+  <Accordion title="Event handling">\
+    - Log all events for debugging\
+    - Implement error boundaries\
+    - Check event handler registration\
+  </Accordion>\
+</AccordionGroup>\
+\
+<Info>\
+  For detailed implementation examples, check our [SDK\
+  documentation](/docs/conversational-ai/libraries/python).\
+</Info>\
+---\
+title: Client to server events\
+subtitle: >-\
+  Send contextual information from the client to enhance conversational\
+  applications in real-time.\
+---\
+\
+**Client-to-server events** are messages that your application proactively sends to the server to provide additional context during conversations. These events enable you to enhance the conversation with relevant information without interrupting the conversational flow.\
+\
+<Note>\
+  For information on events the server sends to the client, see the [Client\
+  events](/docs/conversational-ai/customization/events/client-events) documentation.\
+</Note>\
+\
+## Overview\
+\
+Your application can send contextual information to the server to improve conversation quality and relevance at any point during the conversation. This does not have to be in response to a client event received from the server. This is particularly useful for sharing UI state, user actions, or other environmental data that may not be directly communicated through voice.\
+\
+<Info>\
+  While our SDKs provide helper methods for sending these events, understanding the underlying\
+  protocol is valuable for custom implementations and advanced use cases.\
+</Info>\
+\
+## Contextual updates\
+\
+The primary client-to-server event is the contextual update, which allows your application to send non-interrupting background information to the conversation.\
+\
+**Key characteristics:**\
+\
+- Updates are incorporated as background information in the conversation.\
+- Does not interrupt the current conversation flow.\
+- Useful for sending UI state, user actions, or environmental data.\
+\
+```javascript\
+// Contextual update event structure\
+\{\
+  "type": "contextual_update",\
+  "text": "User appears to be looking at pricing page"\
+\}\
+```\
+\
+```javascript\
+// Example sending contextual updates\
+function sendContextUpdate(information) \{\
+  websocket.send(\
+    JSON.stringify(\{\
+      type: 'contextual_update',\
+      text: information,\
+    \})\
+  );\
+\}\
+\
+// Usage examples\
+sendContextUpdate('Customer status: Premium tier');\
+sendContextUpdate('User navigated to Help section');\
+sendContextUpdate('Shopping cart contains 3 items');\
+```\
+\
+## Best practices\
+\
+1. **Contextual updates**\
+\
+   - Send relevant but concise contextual information.\
+   - Avoid overwhelming the LLM with too many updates.\
+   - Focus on information that impacts the conversation flow or is important context from activity in a UI not accessible to the voice agent.\
+\
+2. **Timing considerations**\
+\
+   - Send updates at appropriate moments.\
+   - Consider grouping multiple contextual updates into a single update (instead of sending every small change separately).\
+\
+<Info>\
+  For detailed implementation examples, check our [SDK\
+  documentation](/docs/conversational-ai/libraries/python).\
+</Info>\
+---\
+title: Conversation flow\
+subtitle: >-\
+  Configure how your assistant handles timeouts and interruptions during\
+  conversations.\
+---\
+\
+## Overview\
+\
+Conversation flow settings determine how your assistant handles periods of user silence and interruptions during speech. These settings help create more natural conversations and can be customized based on your use case.\
+\
+<CardGroup cols=\{2\}>\
+  <Card title="Timeouts" icon="clock" href="#timeouts">\
+    Configure how long your assistant waits during periods of silence\
+  </Card>\
+  <Card title="Interruptions" icon="hand" href="#interruptions">\
+    Control whether users can interrupt your assistant while speaking\
+  </Card>\
+</CardGroup>\
+\
+## Timeouts\
+\
+Timeout handling determines how long your assistant will wait during periods of user silence before prompting for a response.\
+\
+### Configuration\
+\
+Timeout settings can be configured in the agent's **Advanced** tab under **Turn Timeout**.\
+\
+The timeout duration is specified in seconds and determines how long the assistant will wait in silence before prompting the user. Turn timeouts must be between 1 and 30 seconds.\
+\
+#### Example Timeout Settings\
+\
+<Frame background="subtle">\
+  ![Timeout settings](file:bc2d0c44-21cf-424c-ab7b-f046804e0bde)\
+</Frame>\
+\
+<Note>\
+  Choose an appropriate timeout duration based on your use case. Shorter timeouts create more\
+  responsive conversations but may interrupt users who need more time to respond, leading to a less\
+  natural conversation.\
+</Note>\
+\
+### Best practices for timeouts\
+\
+- Set shorter timeouts (5-10 seconds) for casual conversations where quick back-and-forth is expected\
+- Use longer timeouts (10-30 seconds) when users may need more time to think or formulate complex responses\
+- Consider your user context - customer service may benefit from shorter timeouts while technical support may need longer ones\
+\
+## Interruptions\
+\
+Interruption handling determines whether users can interrupt your assistant while it's speaking.\
+\
+### Configuration\
+\
+Interruption settings can be configured in the agent's **Advanced** tab under **Client Events**.\
+\
+To enable interruptions, make sure interruption is a selected client event.\
+\
+#### Interruptions Enabled\
+\
+<Frame background="subtle">\
+  ![Interruption allowed](file:96e2987c-e3f3-4d67-8c16-0e6d22604313)\
+</Frame>\
+\
+#### Interruptions Disabled\
+\
+<Frame background="subtle">\
+  ![Interruption ignored](file:8dc6de95-8465-460c-ad73-7161e5078161)\
+</Frame>\
+\
+<Note>\
+  Disable interruptions when the complete delivery of information is crucial, such as legal\
+  disclaimers or safety instructions.\
+</Note>\
+\
+### Best practices for interruptions\
+\
+- Enable interruptions for natural conversational flows where back-and-forth dialogue is expected\
+- Disable interruptions when message completion is critical (e.g., terms and conditions, safety information)\
+- Consider your use case context - customer service may benefit from interruptions while information delivery may not\
+\
+## Recommended configurations\
+\
+<AccordionGroup>\
+  <Accordion title="Customer service">\
+    - Shorter timeouts (5-10 seconds) for responsive interactions - Enable interruptions to allow\
+    customers to interject with questions\
+  </Accordion>\
+  <Accordion title="Legal disclaimers">\
+    - Longer timeouts (15-30 seconds) to allow for complex responses - Disable interruptions to\
+    ensure full delivery of legal information\
+  </Accordion>\
+  <Accordion title="Conversational EdTech">\
+    - Longer timeouts (10-30 seconds) to allow time to think and formulate responses - Enable\
+    interruptions to allow students to interject with questions\
+  </Accordion>\
+</AccordionGroup>\
+---\
+title: Authentication\
+subtitle: Learn how to secure access to your conversational AI agents\
+---\
+\
+## Overview\
+\
+When building conversational AI agents, you may need to restrict access to certain agents or conversations. ElevenLabs provides multiple authentication mechanisms to ensure only authorized users can interact with your agents.\
+\
+## Authentication methods\
+\
+ElevenLabs offers two primary methods to secure your conversational AI agents:\
+\
+<CardGroup cols=\{2\}>\
+  <Card title="Signed URLs" icon="signature" href="#using-signed-urls">\
+    Generate temporary authenticated URLs for secure client-side connections without exposing API\
+    keys.\
+  </Card>\
+  <Card title="Allowlists" icon="list-check" href="#using-allowlists">\
+    Restrict access to specific domains or hostnames that can connect to your agent.\
+  </Card>\
+</CardGroup>\
+\
+## Using signed URLs\
+\
+Signed URLs are the recommended approach for client-side applications. This method allows you to authenticate users without exposing your API key.\
+\
+<Note>\
+  The guides below uses the [JS client](https://www.npmjs.com/package/@11labs/client) and [Python\
+  SDK](https://github.com/elevenlabs/elevenlabs-python/).\
+</Note>\
+\
+### How signed URLs work\
+\
+1. Your server requests a signed URL from ElevenLabs using your API key.\
+2. ElevenLabs generates a temporary token and returns a signed WebSocket URL.\
+3. Your client application uses this signed URL to establish a WebSocket connection.\
+4. The signed URL expires after 15 minutes.\
+\
+<Warning>Never expose your ElevenLabs API key client-side.</Warning>\
+\
+### Generate a signed URL via the API\
+\
+To obtain a signed URL, make a request to the `get_signed_url` [endpoint](/docs/conversational-ai/api-reference/conversations/get-signed-url) with your agent ID:\
+\
+<CodeBlocks>\
+```python\
+# Server-side code using the Python SDK\
+from elevenlabs.client import ElevenLabs\
+async def get_signed_url():\
+    try:\
+        elevenlabs = ElevenLabs(api_key="your-api-key")\
+        response = await elevenlabs.conversational_ai.conversations.get_signed_url(agent_id="your-agent-id")\
+        return response.signed_url\
+    except Exception as error:\
+        print(f"Error getting signed URL: \{error\}")\
+        raise\
+```\
+\
+```javascript\
+import \{ ElevenLabsClient \} from 'elevenlabs';\
+\
+// Server-side code using the JavaScript SDK\
+const elevenlabs = new ElevenLabsClient(\{ apiKey: 'your-api-key' \});\
+async function getSignedUrl() \{\
+  try \{\
+    const response = await elevenlabs.conversationalAi.conversations.getSignedUrl(\{\
+      agent_id: 'your-agent-id',\
+    \});\
+\
+    return response.signed_url;\
+  \} catch (error) \{\
+    console.error('Error getting signed URL:', error);\
+    throw error;\
+  \}\
+\}\
+```\
+\
+```bash\
+curl -X GET "https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=your-agent-id" \\\
+-H "xi-api-key: your-api-key"\
+```\
+\
+</CodeBlocks>\
+\
+The curl response has the following format:\
+\
+```json\
+\{\
+  "signed_url": "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=your-agent-id&conversation_signature=your-token"\
+\}\
+```\
+\
+### Connecting to your agent using a signed URL\
+\
+Retrieve the server generated signed URL from the client and use the signed URL to connect to the websocket.\
+\
+<CodeBlocks>\
+\
+```python\
+# Client-side code using the Python SDK\
+from elevenlabs.conversational_ai.conversation import (\
+    Conversation,\
+    AudioInterface,\
+    ClientTools,\
+    ConversationInitiationData\
+)\
+import os\
+from elevenlabs.client import ElevenLabs\
+api_key = os.getenv("ELEVENLABS_API_KEY")\
+\
+elevenlabs = ElevenLabs(api_key=api_key)\
+\
+conversation = Conversation(\
+  client=elevenlabs,\
+  agent_id=os.getenv("AGENT_ID"),\
+  requires_auth=True,\
+  audio_interface=AudioInterface(),\
+  config=ConversationInitiationData()\
+)\
+\
+async def start_conversation():\
+  try:\
+    signed_url = await get_signed_url()\
+    conversation = Conversation(\
+      client=elevenlabs,\
+      url=signed_url,\
+    )\
+\
+    conversation.start_session()\
+  except Exception as error:\
+    print(f"Failed to start conversation: \{error\}")\
+\
+```\
+\
+```javascript\
+// Client-side code using the JavaScript SDK\
+import \{ Conversation \} from '@11labs/client';\
+\
+async function startConversation() \{\
+  try \{\
+    const signedUrl = await getSignedUrl();\
+    const conversation = await Conversation.startSession(\{\
+      signedUrl,\
+    \});\
+\
+    return conversation;\
+  \} catch (error) \{\
+    console.error('Failed to start conversation:', error);\
+    throw error;\
+  \}\
+\}\
+```\
+\
+</CodeBlocks>\
+\
+### Signed URL expiration\
+\
+Signed URLs are valid for 15 minutes. The conversation session can last longer, but the conversation must be initiated within the 15 minute window.\
+\
+## Using allowlists\
+\
+Allowlists provide a way to restrict access to your conversational AI agents based on the origin domain. This ensures that only requests from approved domains can connect to your agent.\
+\
+### How allowlists work\
+\
+1. You configure a list of approved hostnames for your agent.\
+2. When a client attempts to connect, ElevenLabs checks if the request's origin matches an allowed hostname.\
+3. If the origin is on the allowlist, the connection is permitted; otherwise, it's rejected.\
+\
+### Configuring allowlists\
+\
+Allowlists are configured as part of your agent's authentication settings. You can specify up to 10 unique hostnames that are allowed to connect to your agent.\
+\
+### Example: setting up an allowlist\
+\
+<CodeBlocks>\
+\
+```python\
+from elevenlabs.client import ElevenLabs\
+import os\
+from elevenlabs.types import *\
+\
+api_key = os.getenv("ELEVENLABS_API_KEY")\
+elevenlabs = ElevenLabs(api_key=api_key)\
+\
+agent = elevenlabs.conversational_ai.agents.create(\
+  conversation_config=ConversationalConfig(\
+    agent=AgentConfig(\
+      first_message="Hi. I'm an authenticated agent.",\
+    )\
+  ),\
+  platform_settings=AgentPlatformSettingsRequestModel(\
+  auth=AuthSettings(\
+    enable_auth=False,\
+    allowlist=[\
+      AllowlistItem(hostname="example.com"),\
+      AllowlistItem(hostname="app.example.com"),\
+      AllowlistItem(hostname="localhost:3000")\
+      ]\
+    )\
+  )\
+)\
+```\
+\
+```javascript\
+async function createAuthenticatedAgent(client) \{\
+  try \{\
+    const agent = await elevenlabs.conversationalAi.agents.create(\{\
+      conversation_config: \{\
+        agent: \{\
+          first_message: "Hi. I'm an authenticated agent.",\
+        \},\
+      \},\
+      platform_settings: \{\
+        auth: \{\
+          enable_auth: false,\
+          allowlist: [\
+            \{ hostname: 'example.com' \},\
+            \{ hostname: 'app.example.com' \},\
+            \{ hostname: 'localhost:3000' \},\
+          ],\
+        \},\
+      \},\
+    \});\
+\
+    return agent;\
+  \} catch (error) \{\
+    console.error('Error creating agent:', error);\
+    throw error;\
+  \}\
+\}\
+```\
+\
+</CodeBlocks>\
+\
+## Combining authentication methods\
+\
+For maximum security, you can combine both authentication methods:\
+\
+1. Use `enable_auth` to require signed URLs.\
+2. Configure an allowlist to restrict which domains can request those signed URLs.\
+\
+This creates a two-layer authentication system where clients must:\
+\
+- Connect from an approved domain\
+- Possess a valid signed URL\
+\
+<CodeBlocks>\
+\
+```python\
+from elevenlabs.client import ElevenLabs\
+import os\
+from elevenlabs.types import *\
+api_key = os.getenv("ELEVENLABS_API_KEY")\
+elevenlabs = ElevenLabs(api_key=api_key)\
+agent = elevenlabs.conversational_ai.agents.create(\
+  conversation_config=ConversationalConfig(\
+    agent=AgentConfig(\
+      first_message="Hi. I'm an authenticated agent that can only be called from certain domains.",\
+    )\
+  ),\
+platform_settings=AgentPlatformSettingsRequestModel(\
+  auth=AuthSettings(\
+    enable_auth=True,\
+    allowlist=[\
+      AllowlistItem(hostname="example.com"),\
+      AllowlistItem(hostname="app.example.com"),\
+      AllowlistItem(hostname="localhost:3000")\
+    ]\
+  )\
+)\
+```\
+\
+```javascript\
+async function createAuthenticatedAgent(elevenlabs) \{\
+  try \{\
+    const agent = await elevenlabs.conversationalAi.agents.create(\{\
+      conversation_config: \{\
+        agent: \{\
+          first_message: "Hi. I'm an authenticated agent.",\
+        \},\
+      \},\
+      platform_settings: \{\
+        auth: \{\
+          enable_auth: true,\
+          allowlist: [\
+            \{ hostname: 'example.com' \},\
+            \{ hostname: 'app.example.com' \},\
+            \{ hostname: 'localhost:3000' \},\
+          ],\
+        \},\
+      \},\
+    \});\
+\
+    return agent;\
+  \} catch (error) \{\
+    console.error('Error creating agent:', error);\
+    throw error;\
+  \}\
+\}\
+```\
+\
+</CodeBlocks>\
+\
+## FAQ\
+\
+<AccordionGroup>\
+  <Accordion title="Can I use the same signed URL for multiple users?">\
+    This is possible but we recommend generating a new signed URL for each user session.\
+  </Accordion>\
+  <Accordion title="What happens if the signed URL expires during a conversation?">\
+    If the signed URL expires (after 15 minutes), any WebSocket connection created with that signed\
+    url will **not** be closed, but trying to create a new connection with that signed URL will\
+    fail.\
+  </Accordion>\
+  <Accordion title="Can I restrict access to specific users?">\
+    The signed URL mechanism only verifies that the request came from an authorized source. To\
+    restrict access to specific users, implement user authentication in your application before\
+    requesting the signed URL.\
+  </Accordion>\
+  <Accordion title="Is there a limit to how many signed URLs I can generate?">\
+    There is no specific limit on the number of signed URLs you can generate.\
+  </Accordion>\
+  <Accordion title="How do allowlists handle subdomains?">\
+    Allowlists perform exact matching on hostnames. If you want to allow both a domain and its\
+    subdomains, you need to add each one separately (e.g., "example.com" and "app.example.com").\
+  </Accordion>\
+  <Accordion title="Do I need to use both authentication methods?">\
+    No, you can use either signed URLs or allowlists independently based on your security\
+    requirements. For highest security, we recommend using both.\
+  </Accordion>\
+  <Accordion title="What other security measures should I implement?">\
+    Beyond signed URLs and allowlists, consider implementing:\
+\
+    - User authentication before requesting signed URLs\
+    - Rate limiting on API requests\
+    - Usage monitoring for suspicious patterns\
+    - Proper error handling for auth failures\
+\
+  </Accordion>\
+</AccordionGroup>\
+---\
+title: SIP trunking\
+subtitle: >-\
+  Connect your existing phone system with ElevenLabs conversational AI agents\
+  using SIP trunking\
+---\
+\
+## Overview\
+\
+SIP (Session Initiation Protocol) trunking allows you to connect your existing telephony infrastructure directly to ElevenLabs conversational AI agents.\
+This integration enables enterprise customers to use their existing phone systems while leveraging ElevenLabs' advanced voice AI capabilities.\
+\
+With SIP trunking, you can:\
+\
+- Connect your Private Branch Exchange (PBX) or SIP-enabled phone system to ElevenLabs' voice AI platform\
+- Route calls to AI agents without changing your existing phone infrastructure\
+- Handle both inbound and outbound calls\
+\
+## How SIP trunking works\
+\
+SIP trunking establishes a direct connection between your telephony infrastructure and the ElevenLabs platform:\
+\
+1. **Inbound calls**: Calls from your SIP trunk are routed to the ElevenLabs platform using our origination URI.\
+2. **Outbound calls**: Calls initiated by ElevenLabs are routed to your SIP trunk using your termination URI, enabling your agents to make outgoing calls.\
+3. **Authentication**: Connection security for the signaling is maintained through either digest authentication (username/password) or Access Control List (ACL) authentication based on the signaling source IP.\
+4. **Signaling and Media**: The initial call setup (signaling) uses TCP. Once the call is established, the actual audio data (RTP stream) is transmitted over UDP for low latency.\
+\
+## Requirements\
+\
+Before setting up SIP trunking, ensure you have:\
+\
+1. A SIP-compatible PBX or telephony system\
+2. Phone numbers that you want to connect to ElevenLabs\
+3. Administrator access to your SIP trunk configuration\
+4. Appropriate firewall settings to allow SIP traffic\
+\
+## Setting up SIP trunking\
+\
+<Steps>\
+  <Step title="Navigate to Phone Numbers">\
+    Go to the [Phone Numbers section](https://elevenlabs.io/app/conversational-ai/phone-numbers) in the ElevenLabs Conversational AI dashboard.\
+  </Step>\
+  <Step title="Import SIP Trunk">\
+    Click on "Import a phone number from SIP trunk" button to open the configuration dialog.\
+\
+    <Frame background="subtle">\
+      <img src="file:723f88ea-91d6-467c-a1f2-9f1c0dccd74f" alt="Select SIP trunk option" />\
+    </Frame>\
+\
+    <Frame background="subtle">\
+      <img src="file:e4b68e0a-e047-4208-ad4d-e88cc0581aed" alt="SIP trunk configuration dialog" />\
+    </Frame>\
+\
+    When you import a SIP trunk, the system automatically configures the ElevenLabs origination URI for inbound calls:\
+    `sip:sip.rtc.elevenlabs.io:5060;transport=tcp`\
+\
+    This pre-populated URI cannot be modified and serves as the destination endpoint where your system should route all inbound calls (calls from your system to ElevenLabs).\
+\
+    <Note>\
+      The `transport=tcp` parameter specifies that the initial SIP signaling connection uses TCP. However, the actual audio data (RTP stream) is transmitted over UDP for low-latency performance, which is standard for real-time communication. This distinction is important: only the call setup uses TCP; the voice data itself uses UDP.\
+    </Note>\
+\
+  </Step>\
+  <Step title="Enter configuration details">\
+    Complete the form with the following information:\
+\
+    - **Label**: A descriptive name for the phone number\
+    - **Phone Number**: The E.164 formatted phone number to connect (e.g., +15551234567)\
+    - **Termination URI**: Your SIP trunk's termination URI (where ElevenLabs will send outbound calls)\
+\
+    <Frame background="subtle">\
+      <img src="file:76d884b0-fa18-43d0-9ba2-7dfc788eff23" alt="SIP trunk inbound configuration" />\
+    </Frame>\
+\
+  </Step>\
+  <Step title="Configure authentication (optional)">\
+\
+    If your SIP provider requires digest authentication:\
+\
+    - Enter the username for SIP digest authentication\
+    - Enter the password for SIP digest authentication\
+\
+    <Frame background="subtle">\
+      <img src="file:f32d3732-caa4-488e-b121-efc8527a1b02" alt="SIP trunk outbound configuration" />\
+    </Frame>\
+\
+    If left empty, Access Control List (ACL) authentication based on the source IP address will be attempted. In this case, you'll need to ensure your system sends SIP requests from an IP address that you allowlist in your provider's settings, and that your firewall allows return traffic from ElevenLabs.\
+\
+    <Info>\
+      **Signaling vs. Media IPs**:\
+      - The **SIP signaling** connection originates from `sip.rtc.elevenlabs.io` (currently resolving to `34.49.132.122`). This IP is static and can be allowlisted if using ACL authentication.\
+      - The **RTP media stream** (audio data) uses dynamic IP addresses from an autoscaling pool. These IPs change and **cannot be reliably allowlisted**.\
+\
+      For robust security without relying on IP allowlisting for media, **Digest Authentication is strongly recommended**.\
+    </Info>\
+\
+  </Step>\
+  <Step title="Complete Setup">\
+    Click "Import" to finalize the configuration.\
+  </Step>\
+</Steps>\
+\
+## Assigning Agents to Phone Numbers\
+\
+After importing your SIP trunk phone number, you can assign it to a conversational AI agent:\
+\
+1. Go to the Phone Numbers section in the Conversational AI dashboard\
+2. Select your imported SIP trunk phone number\
+3. Click "Assign Agent"\
+4. Select the agent you want to handle calls to this number\
+\
+## Troubleshooting\
+\
+<AccordionGroup>\
+\
+  <Accordion title="Connection Issues">\
+    If you're experiencing connection problems: \
+    \
+    1. Verify your SIP trunk configuration on both the ElevenLabs side and your provider side. \
+    2. Check that your firewall allows SIP signaling traffic\
+    (TCP/UDP port 5060) *to* `sip.rtc.elevenlabs.io` (`34.49.132.122`) and allows RTP traffic \
+    3. Confirm that your termination URI is correctly formatted. \
+    4. Test with and without digest authentication credentials.\
+    \
+  </Accordion>\
+  <Accordion title="Authentication Failures">\
+    If calls are failing due to authentication issues:\
+\
+    1. Double-check your username and password if using digest authentication.\
+    2. If using ACL authentication, ensure your provider is configured to trust signaling traffic from `sip.rtc.elevenlabs.io` (`34.49.132.122`). Remember that ACL does not\
+    apply to the media stream IPs.\
+    3. Check your SIP trunk provider's logs for specific authenticatio nerror messages.\
+\
+  </Accordion>\
+  <Accordion title="No Audio or One-Way Audio">\
+    If the call connects but there's no audio or audio only flows one way:\
+\
+    1. Verify that your firewall allows UDP traffic for the RTP media stream (typically ports 10000-60000).\
+    Since these IPs change, ensure the rule is not restricted to specific static IPs.\
+    2. Check for Network Address Translation (NAT) issues that might be blocking the RTP\
+    stream.\
+\
+  </Accordion>\
+  <Accordion title="Audio Quality Issues">\
+    If you experience poor audio quality:\
+\
+    1. Ensure your network has sufficient bandwidth (at least\
+      100 Kbps per call) and low latency/jitter for UDP traffic.\
+    2. Check for network congestion or packet loss, particularly on the UDP path.\
+    3. Verify codec settings match on both ends.\
+\
+  </Accordion>\
+\
+</AccordionGroup>\
+\
+## Limitations and Considerations\
+\
+- Support for multiple concurrent calls depends on your subscription tier\
+- Call recording and analytics features are available but may require additional configuration\
+- Outbound calling capabilities may be limited by your SIP trunk provider\
+- Currently, only PCM audio formats (e.g., PCM 16kHz) are supported for SIP trunking connections.\
+\
+## FAQ\
+\
+<AccordionGroup>\
+  <Accordion title="Can I use my existing phone numbers with ElevenLabs?">\
+    Yes, SIP trunking allows you to connect your existing phone numbers directly to ElevenLabs'\
+    conversational AI platform without porting them.\
+  </Accordion>\
+\
+<Accordion title="What SIP trunk providers are compatible with ElevenLabs?">\
+  ElevenLabs is compatible with most standard SIP trunk providers including Twilio, Vonage,\
+  RingCentral, Sinch, Infobip, Telnyx, Exotel, Plivo, Bandwidth, and others that support SIP\
+  protocol standards.\
+</Accordion>\
+\
+<Accordion title="How many concurrent calls are supported?">\
+  The number of concurrent calls depends on your subscription plan. Enterprise plans typically allow\
+  for higher volumes of concurrent calls.\
+</Accordion>\
+\
+<Accordion title="Is call encryption supported?">\
+  Yes, ElevenLabs supports encrypted SIP communications (SIPS) for enhanced security. Contact\
+  support for specific configuration requirements.\
+</Accordion>\
+\
+  <Accordion title="Can I route calls conditionally to different agents?">\
+    Yes, you can use your existing PBX system's routing rules to direct calls to different phone\
+    numbers, each connected to different ElevenLabs agents.\
+  </Accordion>\
+</AccordionGroup>\
+\
+## Next steps\
+\
+- [Learn about creating conversational AI agents](/docs/conversational-ai/quickstart)\
+---\
+title: Vonage integration\
+subtitle: >-\
+  Integrate ElevenLabs Conversational AI with Vonage voice calls using a\
+  WebSocket connector.\
+---\
+\
+## Overview\
+\
+Connect ElevenLabs Conversational AI Agents to Vonage Voice API or Video API calls using a [WebSocket connector application](https://github.com/nexmo-se/elevenlabs-agent-ws-connector). This enables real-time, bi-directional audio streaming for use cases like PSTN calls, SIP trunks, and WebRTC clients.\
+\
+## How it works\
+\
+The Node.js connector bridges Vonage and ElevenLabs:\
+\
+1.  Vonage initiates a WebSocket connection to the connector for an active call.\
+2.  The connector establishes a WebSocket connection to the ElevenLabs Conversational AI endpoint.\
+3.  Audio is relayed: Vonage (L16) -> Connector -> ElevenLabs (base64) and vice-versa.\
+4.  The connector manages conversation events (`user_transcript`, `agent_response`, `interruption`).\
+\
+## Setup\
+\
+<Steps>\
+\
+### 1. Get ElevenLabs credentials\
+\
+- **API Key**: on the [ElevenLabs dashboard](https://elevenlabs.io/app), click "My Account" and then "API Keys" in the popup that appears.\
+- **Agent ID**: Find the agent in the [Conversational AI dashboard](https://elevenlabs.io/app/conversational-ai/agents/). Once you have selected the agent click on the settings button and select "Copy Agent ID".\
+\
+### 2. Configure the connector\
+\
+Clone the repository and set up the environment file.\
+\
+```bash\
+git clone https://github.com/nexmo-se/elevenlabs-agent-ws-connector.git\
+cd elevenlabs-agent-ws-connector\
+cp .env.example .env\
+```\
+\
+Add your credentials to `.env`:\
+\
+```bash title=".env"\
+ELEVENLABS_API_KEY = YOUR_API_KEY;\
+ELEVENLABS_AGENT_ID = YOUR_AGENT_ID;\
+```\
+\
+Install dependencies: `npm install`.\
+\
+### 3. Expose the connector (local development)\
+\
+Use ngrok, or a similar service, to create a public URL for the connector (default port 6000).\
+\
+```bash\
+ngrok http 6000\
+```\
+\
+Note the public `Forwarding` URL (e.g., `xxxxxxxx.ngrok-free.app`). **Do not include `https://`** when configuring Vonage.\
+\
+### 4. Run the connector\
+\
+Start the application:\
+\
+```bash\
+node elevenlabs-agent-ws-connector.cjs\
+```\
+\
+### 5. Configure Vonage voice application\
+\
+Your Vonage app needs to connect to the connector's WebSocket endpoint (`wss://YOUR_CONNECTOR_HOSTNAME/socket`). This is the ngrok URL from step 3.\
+\
+- **Use Sample App**: Configure the [sample Vonage app](https://github.com/nexmo-se/voice-to-ai-engines) with `PROCESSOR_SERVER` set to your connector's hostname.\
+- **Update Existing App**: Modify your [Nexmo Call Control Object](https://developer.vonage.com/en/voice/voice-api/ncco-reference) to include a `connect` action targeting the connector's WebSocket URI (`wss://...`) with `content-type: audio/l16;rate=16000`. Pass necessary query parameters like `peer_uuid` and `webhook_url`.\
+\
+### 6. Test\
+\
+Make an inbound or outbound call via your Vonage application to interact with the ElevenLabs agent.\
+\
+</Steps>\
+\
+## Cloud deployment\
+\
+For production, deploy the connector to a stable hosting provider (e.g., Vonage Cloud Runtime) with a public hostname.\
+---\
+title: Telnyx SIP trunking\
+subtitle: Connect Telnyx SIP trunks with ElevenLabs conversational AI agents.\
+---\
+\
+<Note>\
+  Before following this guide, consider reading the [SIP trunking\
+  guide](/docs/conversational-ai/phone-numbers/sip-trunking) to understand how ElevenLabs supports\
+  SIP trunks.\
+</Note>\
+\
+## Overview\
+\
+This guide explains how to connect your Telnyx SIP trunks directly to ElevenLabs conversational AI agents. This integration allows you to use your existing Telnyx phone numbers and infrastructure while leveraging ElevenLabs' advanced voice AI capabilities.\
+\
+## How SIP trunking with Telnyx works\
+\
+SIP trunking establishes a direct connection between your Telnyx telephony infrastructure and the ElevenLabs platform:\
+\
+1. **Inbound calls**: Calls from your Telnyx SIP trunk are routed to the ElevenLabs platform using our origination URI. You will configure this in your Telnyx account.\
+2. **Outbound calls**: Calls initiated by ElevenLabs are routed to your Telnyx SIP trunk using your termination URI, enabling your agents to make outgoing calls.\
+3. **Authentication**: Connection security is maintained through either digest authentication (username/password) or Access Control List (ACL) authentication.\
+4. **Signaling and Media**: The initial call setup (signaling) uses TCP. Once the call is established, the actual audio data (RTP stream) is transmitted over UDP.\
+\
+## Requirements\
+\
+Before setting up the Telnyx SIP trunk integration, ensure you have:\
+\
+1. An active ElevenLabs account\
+2. An active Telnyx account\
+3. At least one phone number purchased or ported into your Telnyx account\
+4. Administrator access to your Telnyx portal\
+5. Appropriate firewall settings to allow SIP and RTP traffic\
+\
+## Creating a SIP trunk using the Telnyx UI\
+\
+<Steps>\
+\
+    <Step title="Sign in to Telnyx">\
+      Log in to your Telnyx account at [portal.telnyx.com](https://portal.telnyx.com/).\
+    </Step>\
+\
+    <Step title="Purchase a phone number">\
+      Navigate to the Numbers section and purchase a phone number that will be used with your ElevenLabs agent.\
+    </Step>\
+\
+    <Step title="Navigate to SIP Trunking">\
+      Go to Voice \'bb SIP Trunking in the Telnyx portal.\
+    </Step>\
+\
+    <Step title="Create a SIP connection">\
+      Click on Create SIP Connection and choose FQDN as the connection type, then save.\
+    </Step>\
+\
+    <Step title="Configure inbound settings">\
+      1. Select Add FQDN and enter `sip.rtc.elevenlabs.io` into the FQDN field.\
+      2. Select the Inbound tab.\
+      3. In the Destination Number Format field, select `+E.164`.\
+      4. For SIP Transport Protocol, select TCP.\
+      5. In the SIP Region field, select your region.\
+    </Step>\
+\
+    <Step title="Configure outbound settings">\
+      1. Select the Outbound tab.\
+      2. In the Outbound Voice Profile field, select or create an outbound voice profile.\
+    </Step>\
+\
+    <Step title="Configure authentication">\
+      1. Select the Settings tab.\
+      2. In the Authentication & Routing Configuration section, select Outbound Calls Authentication.\
+      3. In the Authentication Method field, select Credentials and enter a username and password.\
+    </Step>\
+\
+\
+    <Step title="Assign phone number">\
+      1. Select the Numbers tab.\
+      2. Assign your purchased phone number to this SIP connection.\
+    </Step>\
+\
+</Steps>\
+\
+<Warning>\
+  After setting up your Telnyx SIP trunk, follow the [SIP trunking\
+  guide](/conversational-ai/guides/sip-trunking) to complete the configuration in ElevenLabs.\
+</Warning>\
+---\
+title: Plivo\
+subtitle: Integrate ElevenLabs conversational AI agents with your Plivo SIP trunks\
+---\
+\
+<Note>\
+  Before following this guide, consider reading the [SIP trunking\
+  guide](/docs/conversational-ai/phone-numbers/sip-trunking) to understand how ElevenLabs supports\
+  SIP trunks.\
+</Note>\
+\
+## Overview\
+\
+This guide explains how to connect your Plivo SIP trunks directly to ElevenLabs conversational AI agents.\
+This integration allows you to use your existing Plivo phone numbers and infrastructure while leveraging ElevenLabs' advanced voice AI capabilities, for both inbound and outbound calls.\
+\
+## How SIP trunking with Plivo works\
+\
+SIP trunking establishes a direct connection between your Plivo telephony infrastructure and the ElevenLabs platform:\
+\
+1.  **Inbound calls**: Calls from your Plivo SIP trunk are routed to the ElevenLabs platform using our origination URI. You will configure this in your Plivo account.\
+2.  **Outbound calls**: Calls initiated by ElevenLabs are routed to your Plivo SIP trunk using your termination URI, enabling your agents to make outgoing calls.\
+3.  **Authentication**: Connection security for the signaling is maintained through either digest authentication (username/password) or Access Control List (ACL) authentication based on the signaling source IP from Plivo.\
+4.  **Signaling and Media**: The initial call setup (signaling) uses TCP. Once the call is established, the actual audio data (RTP stream) is transmitted over UDP.\
+\
+## Requirements\
+\
+Before setting up the Plivo SIP trunk integration, ensure you have:\
+\
+1.  An active Plivo account with SIP trunking enabled\
+2.  Plivo phone numbers that you want to connect to ElevenLabs\
+3.  Administrator access to your Plivo account and SIP trunk configuration\
+4.  Appropriate firewall settings to allow SIP traffic to and from ElevenLabs and Plivo\
+\
+## Configuring Plivo SIP trunks\
+\
+This section provides detailed instructions for creating SIP trunks in Plivo before connecting them to ElevenLabs.\
+\
+### Setting up inbound trunks (calls from Plivo to ElevenLabs)\
+\
+<Steps>\
+\
+  <Step title="Access Plivo Console">Sign in to the Plivo Console.</Step>\
+  <Step title="Navigate to Zentrunk Dashboard">\
+    Go to the Zentrunk Dashboard in your Plivo account.\
+  </Step>\
+  <Step title="Create inbound SIP trunk">\
+    1. Select "Create New Inbound Trunk" and provide a descriptive name for your trunk. \
+    2. Under Trunk Authentication, click "Add New URI". \
+    3. Enter the ElevenLabs SIP URI: `sip.rtc.elevenlabs.io` \
+    4. Select "Create Trunk" to complete your inbound trunk creation.\
+  </Step>\
+  <Step title="Assign phone number to trunk">\
+    1. Navigate to the Phone Numbers Dashboard and select the number you want to route to your inbound trunk. \
+    2. Under Number Configuration, set "Trunk" to your newly created inbound trunk.\
+    3. Select "Update" to save the configuration.\
+  </Step>\
+  \
+</Steps>\
+\
+### Setting up outbound trunks (calls from ElevenLabs to Plivo)\
+\
+<Steps>\
+  <Step title="Access Plivo Console">Sign in to the Plivo Console.</Step>\
+  \
+  <Step title="Navigate to Zentrunk Dashboard">\
+    Go to the Zentrunk Dashboard in your Plivo account.\
+  </Step>\
+\
+  <Step title="Create outbound SIP trunk">\
+    1. Select "Create New Outbound Trunk" and provide a descriptive name for your trunk. \
+    2. Under Trunk Authentication, click "Add New Credentials List". \
+    3. Add a username and password that you'll use to authenticate outbound calls.\
+    4. Select "Create Credentials List". 5. Save your credentials list and select "Create Trunk" to complete your outbound trunk configuration.\
+  </Step>\
+  \
+  <Step title="Note your termination URI">\
+    After creating the outbound trunk, note the termination URI (typically in the format\
+    `sip:yourusername@yourplivotrunk.sip.plivo.com`). You'll need this information when configuring\
+    the SIP trunk in ElevenLabs.\
+  </Step>\
+</Steps>\
+\
+<Warning>\
+  Once you've set up your Plivo SIP trunk, follow the [SIP trunking\
+  guide](/docs/conversational-ai/phone-numbers/sip-trunking) to finish the setup ElevenLabs as well.\
+</Warning>\
+---\
+title: Twilio native integration\
+subtitle: Learn how to configure inbound calls for your agent with Twilio.\
+---\
+\
+## Overview\
+\
+This guide shows you how to connect a Twilio phone number to your conversational AI agent to handle both inbound and outbound calls.\
+\
+You will learn to:\
+\
+- Import an existing Twilio phone number.\
+- Link it to your agent to handle inbound calls.\
+- Initiate outbound calls using your agent.\
+\
+## Guide\
+\
+### Prerequisites\
+\
+- A [Twilio account](https://twilio.com/).\
+- A purchased & provisioned Twilio [phone number](https://www.twilio.com/docs/phone-numbers).\
+\
+<Steps>\
+\
+<Step title="Import a Twilio phone number">\
+\
+In the Conversational AI dashboard, go to the [**Phone Numbers**](https://elevenlabs.io/app/conversational-ai/phone-numbers) tab.\
+\
+<Frame background="subtle">\
+\
+![Conversational AI phone numbers page](file:0d0acacc-dd6f-4704-843d-86b8d4f6ff75)\
+\
+</Frame>\
+\
+Next, fill in the following details:\
+\
+- **Label:** A descriptive name (e.g., `Customer Support Line`).\
+- **Phone Number:** The Twilio number you want to use.\
+- **Twilio SID:** Your Twilio Account SID.\
+- **Twilio Token:** Your Twilio Auth Token.\
+\
+<Note>\
+\
+You can find your account SID and auth token [**in the Twilio admin console**](https://www.twilio.com/console).\
+\
+</Note>\
+\
+<Tabs>\
+\
+<Tab title="Conversational AI dashboard">\
+\
+<Frame background="subtle">\
+  ![Phone number configuration](file:fc2391b5-de59-4f8a-99cc-fae6b767f227)\
+</Frame>\
+\
+</Tab>\
+\
+<Tab title="Twilio admin console">\
+  Copy the Twilio SID and Auth Token from the [Twilio admin\
+  console](https://www.twilio.com/console).\
+  <Frame background="subtle">\
+    ![Phone number details](file:c0adceab-c8da-4603-a833-2fc8cf1623c3)\
+  </Frame>\
+</Tab>\
+\
+</Tabs>\
+\
+<Note>ElevenLabs automatically configures the Twilio phone number with the correct settings.</Note>\
+\
+<Accordion title="Applied settings">\
+  <Frame background="subtle">\
+    ![Twilio phone number configuration](file:789dc162-d98d-4291-b7be-3a6016d23ea4)\
+  </Frame>\
+</Accordion>\
+\
+</Step>\
+\
+<Step title="Assign your agent">\
+Once the number is imported, select the agent that will handle inbound calls for this phone number.\
+\
+<Frame background="subtle">\
+  ![Select agent for inbound calls](file:61008906-8f39-4c4b-9e43-9caa3acea002)\
+</Frame>\
+</Step>\
+\
+</Steps>\
+\
+Test the agent by giving the phone number a call. Your agent is now ready to handle inbound calls and engage with your customers.\
+\
+<Tip>\
+  Monitor your first few calls in the [Calls History\
+  dashboard](https://elevenlabs.io/app/conversational-ai/history) to ensure everything is working as\
+  expected.\
+</Tip>\
+\
+## Making Outbound Calls\
+\
+Your imported Twilio phone number can also be used to initiate outbound calls where your agent calls a specified phone number.\
+\
+<Steps>\
+\
+<Step title="Initiate an outbound call">\
+\
+From the [**Phone Numbers**](https://elevenlabs.io/app/conversational-ai/phone-numbers) tab, locate your imported Twilio number and click the **Outbound call** button.\
+\
+<Frame background="subtle">\
+  ![Outbound call button](file:6192484d-3b8d-4570-90dd-48a3679901d3)\
+</Frame>\
+\
+</Step>\
+\
+<Step title="Configure the call">\
+\
+In the Outbound Call modal:\
+\
+1. Select the agent that will handle the conversation\
+2. Enter the phone number you want to call\
+3. Click **Send Test Call** to initiate the call\
+\
+<Frame background="subtle">\
+  ![Outbound call configuration](file:6c748a25-abce-4965-a97f-2d247e227b28)\
+</Frame>\
+\
+</Step>\
+\
+</Steps>\
+\
+Once initiated, the recipient will receive a call from your Twilio number. When they answer, your agent will begin the conversation.\
+\
+<Tip>\
+  Outbound calls appear in your [Calls History\
+  dashboard](https://elevenlabs.io/app/conversational-ai/history) alongside inbound calls, allowing\
+  you to review all conversations.\
+</Tip>\
+\
+<Note>\
+  When making outbound calls, your agent will be the initiator of the conversation, so ensure your\
+  agent has appropriate initial messages configured to start the conversation effectively.\
+</Note>\
+---\
+title: Twilio personalization\
+subtitle: Configure personalization for incoming Twilio calls using webhooks.\
+---\
+\
+## Overview\
+\
+When receiving inbound Twilio calls, you can dynamically fetch conversation initiation data through a webhook. This allows you to customize your agent's behavior based on caller information and other contextual data.\
+\
+<iframe\
+  width="100%"\
+  height="400"\
+  src="https://www.youtube-nocookie.com/embed/cAuSo8qNs-8"\
+  title="YouTube video player"\
+  frameborder="0"\
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"\
+  allowfullscreen\
+></iframe>\
+\
+## How it works\
+\
+1. When a Twilio call is received, the ElevenLabs Conversational AI platform will make a webhook call to your specified endpoint, passing call information (`caller_id`, `agent_id`, `called_number`, `call_sid`) as arguments\
+2. Your webhook returns conversation initiation client data, including dynamic variables and overrides (an example is shown below)\
+3. This data is used to initiate the conversation\
+\
+<Tip>\
+\
+The system uses Twilio's connection/dialing period to fetch webhook data in parallel, creating a\
+seamless experience where:\
+\
+- Users hear the expected telephone connection sound\
+- In parallel, theConversational AI platform fetches necessary webhook data\
+- The conversation is initiated with the fetched data by the time the audio connection is established\
+\
+</Tip>\
+\
+## Configuration\
+\
+<Steps>\
+\
+  <Step title="Configure webhook details">\
+    In the [settings page](https://elevenlabs.io/app/conversational-ai/settings) of the Conversational AI platform, configure the webhook URL and add any\
+    secrets needed for authentication.\
+\
+    <Frame background="subtle">\
+        ![Enable webhook](file:a831a720-a746-47d6-b382-015e1ecdc522)\
+    </Frame>\
+\
+    Click on the webhook to modify which secrets are sent in the headers.\
+\
+    <Frame background="subtle">\
+        ![Add secrets to headers](file:5ee70e12-6638-4026-a5f1-5861468d5fe2)\
+    </Frame>\
+\
+  </Step>\
+\
+  <Step title="Enable fetching conversation initiation data">\
+    In the "Security" tab of the [agent's page](https://elevenlabs.io/app/conversational-ai/agents/), enable fetching conversation initiation data for inbound Twilio calls, and define fields that can be overridden.\
+\
+    <Frame background="subtle">\
+        ![Enable webhook](file:002173fc-50de-49f8-be99-729de6e6b01b)\
+    </Frame>\
+\
+  </Step>\
+\
+  <Step title="Implement the webhook endpoint to receive Twilio data">\
+    The webhook will receive a POST request with the following parameters:\
+\
+    | Parameter       | Type   | Description                            |\
+    | --------------- | ------ | -------------------------------------- |\
+    | `caller_id`     | string | The phone number of the caller         |\
+    | `agent_id`      | string | The ID of the agent receiving the call |\
+    | `called_number` | string | The Twilio number that was called      |\
+    | `call_sid`      | string | Unique identifier for the Twilio call  |\
+\
+  </Step>\
+\
+  <Step title="Return conversation initiation client data">\
+   Your webhook must return a JSON response containing the initiation data for the agent.\
+  <Info>\
+    The `dynamic_variables` field must contain all dynamic variables defined for the agent. Overrides\
+    on the other hand are entirely optional. For more information about dynamic variables and\
+    overrides see the [dynamic variables](/docs/conversational-ai/customization/personalization/dynamic-variables) and\
+    [overrides](/docs/conversational-ai/customization/personalization/overrides) docs.\
+  </Info>\
+\
+An example response could be:\
+\
+```json\
+\{\
+  "type": "conversation_initiation_client_data",\
+  "dynamic_variables": \{\
+    "customer_name": "John Doe",\
+    "account_status": "premium",\
+    "last_interaction": "2024-01-15"\
+  \},\
+  "conversation_config_override": \{\
+    "agent": \{\
+      "prompt": \{\
+        "prompt": "The customer's bank account balance is $100. They are based in San Francisco."\
+      \},\
+      "first_message": "Hi, how can I help you today?",\
+      "language": "en"\
+    \},\
+    "tts": \{\
+      "voice_id": "new-voice-id"\
+    \}\
+  \}\
+\}\
+```\
+\
+  </Step>\
+</Steps>\
+\
+The Conversational AI platform will use the dynamic variables to populate the conversation initiation data, and the conversation will start smoothly.\
+\
+<Warning>\
+  Ensure your webhook responds within a reasonable timeout period to avoid delaying the call\
+  handling.\
+</Warning>\
+\
+## Security\
+\
+- Use HTTPS endpoints only\
+- Implement authentication using request headers\
+- Store sensitive values as secrets through the [ElevenLabs secrets manager](https://elevenlabs.io/app/conversational-ai/settings)\
+- Validate the incoming request parameters\
+---\
+title: Twilio custom server\
+subtitle: >-\
+  Learn how to integrate a Conversational AI agent with Twilio to create\
+  seamless, human-like voice interactions.\
+---\
+\
+<Warning>\
+  Custom server should be used for **outbound calls only**. Please use our [native\
+  integration](/docs/conversational-ai/phone-numbers/twilio-integration/native-integration) for\
+  **inbound Twilio calls**.\
+</Warning>\
+\
+Connect your ElevenLabs Conversational AI agent to phone calls and create human-like voice experiences using Twilio's Voice API.\
+\
+## What You'll Need\
+\
+- An [ElevenLabs account](https://elevenlabs.io)\
+- A configured ElevenLabs Conversational Agent ([create one here](/docs/conversational-ai/quickstart))\
+- A [Twilio account](https://www.twilio.com/try-twilio) with an active phone number\
+- Python 3.7+ or Node.js 16+\
+- [ngrok](https://ngrok.com/) for local development\
+\
+## Agent Configuration\
+\
+Before integrating with Twilio, you'll need to configure your agent to use the correct audio format supported by Twilio.\
+\
+<Steps>\
+  <Step title="Configure TTS Output">\
+    1. Navigate to your agent settings\
+    2. Go to the Voice Section\
+    3. Select "\uc0\u956 -law 8000 Hz" from the dropdown\
+\
+   <Frame background="subtle">![](file:0034ff8e-2925-47b7-9b95-0d0424bcf0cf)</Frame>\
+  </Step>\
+\
+  <Step title="Set Input Format">\
+    1. Navigate to your agent settings\
+    2. Go to the Advanced Section\
+    3. Select "\uc0\u956 -law 8000 Hz" for the input format\
+\
+    <Frame background="subtle">![](file:da50c783-15c1-4f7c-99eb-270eec168f46)</Frame>\
+\
+  </Step>\
+</Steps>\
+\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+\cf0 \
+## Implementation\
+\
+<Tabs>\
+  <Tab title="Javascript">\
+\
+    <Note>\
+        Looking for a complete example? Check out this [Javascript implementation](https://github.com/elevenlabs/elevenlabs-examples/tree/main/examples/conversational-ai/twilio/javascript) on GitHub.\
+    </Note>\
+\
+    <Steps>\
+        <Step title="Initialize the Project">\
+            First, set up a new Node.js project:\
+            ```bash\
+            mkdir conversational-ai-twilio\
+            cd conversational-ai-twilio\
+            npm init -y; npm pkg set type="module";\
+            ```\
+        </Step>\
+\
+        <Step title="Install dependencies">\
+            Next, install the required dependencies for the project.\
+            ```bash\
+            npm install @fastify/formbody @fastify/websocket dotenv fastify ws\
+            ```\
+        </Step>\
+        <Step title="Create the project files">\
+            Create a `.env` & `index.js` file  with the following code:\
+\
+            ```\
+            conversational-ai-twilio/\
+            \uc0\u9500 \u9472 \u9472  .env\
+            \uc0\u9492 \u9472 \u9472  index.js\
+            ```\
+\
+            <CodeGroup>\
+\
+            ```text .env\
+            ELEVENLABS_AGENT_ID=<your-agent-id>\
+            ```\
+\
+            ```javascript index.js\
+            import Fastify from "fastify";\
+            import WebSocket from "ws";\
+            import dotenv from "dotenv";\
+            import fastifyFormBody from "@fastify/formbody";\
+            import fastifyWs from "@fastify/websocket";\
+\
+            // Load environment variables from .env file\
+            dotenv.config();\
+\
+            const \{ ELEVENLABS_AGENT_ID \} = process.env;\
+\
+            // Check for the required ElevenLabs Agent ID\
+            if (!ELEVENLABS_AGENT_ID) \{\
+            console.error("Missing ELEVENLABS_AGENT_ID in environment variables");\
+            process.exit(1);\
+            \}\
+\
+            // Initialize Fastify server\
+            const fastify = Fastify();\
+            fastify.register(fastifyFormBody);\
+            fastify.register(fastifyWs);\
+\
+            const PORT = process.env.PORT || 8000;\
+\
+            // Root route for health check\
+            fastify.get("/", async (_, reply) => \{\
+            reply.send(\{ message: "Server is running" \});\
+            \});\
+\
+            // Route to handle incoming calls from Twilio\
+            fastify.all("/twilio/inbound_call", async (request, reply) => \{\
+            // Generate TwiML response to connect the call to a WebSocket stream\
+            const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>\
+                <Response>\
+                <Connect>\
+                    <Stream url="wss://$\{request.headers.host\}/media-stream" />\
+                </Connect>\
+                </Response>`;\
+\
+            reply.type("text/xml").send(twimlResponse);\
+            \});\
+\
+            // WebSocket route for handling media streams from Twilio\
+            fastify.register(async (fastifyInstance) => \{\
+            fastifyInstance.get("/media-stream", \{ websocket: true \}, (connection, req) => \{\
+                console.info("[Server] Twilio connected to media stream.");\
+\
+                let streamSid = null;\
+\
+                // Connect to ElevenLabs Conversational AI WebSocket\
+                const elevenLabsWs = new WebSocket(\
+                `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=$\{ELEVENLABS_AGENT_ID\}`\
+                );\
+\
+                // Handle open event for ElevenLabs WebSocket\
+                elevenLabsWs.on("open", () => \{\
+                console.log("[II] Connected to Conversational AI.");\
+                \});\
+\
+                // Handle messages from ElevenLabs\
+                elevenLabsWs.on("message", (data) => \{\
+                try \{\
+                    const message = JSON.parse(data);\
+                    handleElevenLabsMessage(message, connection);\
+                \} catch (error) \{\
+                    console.error("[II] Error parsing message:", error);\
+                \}\
+                \});\
+\
+                // Handle errors from ElevenLabs WebSocket\
+                elevenLabsWs.on("error", (error) => \{\
+                console.error("[II] WebSocket error:", error);\
+                \});\
+\
+                // Handle close event for ElevenLabs WebSocket\
+                elevenLabsWs.on("close", () => \{\
+                console.log("[II] Disconnected.");\
+                \});\
+\
+                // Function to handle messages from ElevenLabs\
+                const handleElevenLabsMessage = (message, connection) => \{\
+                switch (message.type) \{\
+                    case "conversation_initiation_metadata":\
+                    console.info("[II] Received conversation initiation metadata.");\
+                    break;\
+                    case "audio":\
+                    if (message.audio_event?.audio_base_64) \{\
+                        // Send audio data to Twilio\
+                        const audioData = \{\
+                        event: "media",\
+                        streamSid,\
+                        media: \{\
+                            payload: message.audio_event.audio_base_64,\
+                        \},\
+                        \};\
+                        connection.send(JSON.stringify(audioData));\
+                    \}\
+                    break;\
+                    case "interruption":\
+                    // Clear Twilio's audio queue\
+                    connection.send(JSON.stringify(\{ event: "clear", streamSid \}));\
+                    break;\
+                    case "ping":\
+                    // Respond to ping events from ElevenLabs\
+                    if (message.ping_event?.event_id) \{\
+                        const pongResponse = \{\
+                        type: "pong",\
+                        event_id: message.ping_event.event_id,\
+                        \};\
+                        elevenLabsWs.send(JSON.stringify(pongResponse));\
+                    \}\
+                    break;\
+                \}\
+                \};\
+\
+                // Handle messages from Twilio\
+                connection.on("message", async (message) => \{\
+                try \{\
+                    const data = JSON.parse(message);\
+                    switch (data.event) \{\
+                    case "start":\
+                        // Store Stream SID when stream starts\
+                        streamSid = data.start.streamSid;\
+                        console.log(`[Twilio] Stream started with ID: $\{streamSid\}`);\
+                        break;\
+                    case "media":\
+                        // Route audio from Twilio to ElevenLabs\
+                        if (elevenLabsWs.readyState === WebSocket.OPEN) \{\
+                        // data.media.payload is base64 encoded\
+                        const audioMessage = \{\
+                            user_audio_chunk: Buffer.from(\
+                                data.media.payload,\
+                                "base64"\
+                            ).toString("base64"),\
+                        \};\
+                        elevenLabsWs.send(JSON.stringify(audioMessage));\
+                        \}\
+                        break;\
+                    case "stop":\
+                        // Close ElevenLabs WebSocket when Twilio stream stops\
+                        elevenLabsWs.close();\
+                        break;\
+                    default:\
+                        console.log(`[Twilio] Received unhandled event: $\{data.event\}`);\
+                    \}\
+                \} catch (error) \{\
+                    console.error("[Twilio] Error processing message:", error);\
+                \}\
+                \});\
+\
+                // Handle close event from Twilio\
+                connection.on("close", () => \{\
+                elevenLabsWs.close();\
+                console.log("[Twilio] Client disconnected");\
+                \});\
+\
+                // Handle errors from Twilio WebSocket\
+                connection.on("error", (error) => \{\
+                console.error("[Twilio] WebSocket error:", error);\
+                elevenLabsWs.close();\
+                \});\
+            \});\
+            \});\
+\
+            // Start the Fastify server\
+            fastify.listen(\{ port: PORT \}, (err) => \{\
+            if (err) \{\
+                console.error("Error starting server:", err);\
+                process.exit(1);\
+            \}\
+            console.log(`[Server] Listening on port $\{PORT\}`);\
+            \});\
+            ```\
+\
+            </CodeGroup>\
+\
+\
+\
+        </Step>\
+\
+        <Step title="Run the server">\
+            You can now run the server with the following command:\
+            ```bash\
+            node index.js\
+            ```\
+            If the server starts successfully, you should see the message `[Server] Listening on port 8000` (or the port you specified) in your terminal.\
+        </Step>\
+\
+\
+    </Steps>\
+    </Tab>\
+\
+   <Tab title="Python">\
+       <Note>\
+        Looking for a complete example? Check out this [implementation](https://github.com/elevenlabs/elevenlabs-examples/tree/main/examples/conversational-ai/twilio) on GitHub.\
+        </Note>\
+\
+        <Steps>\
+            <Step title="Initialize the Project">\
+               ```bash\
+                mkdir conversational-ai-twilio\
+                cd conversational-ai-twilio\
+                ```\
+            </Step>\
+            <Step title="Install dependencies">\
+                Next, install the required dependencies for the project.\
+                ```bash\
+                pip install fastapi uvicorn python-dotenv twilio elevenlabs websockets\
+                ```\
+            </Step>\
+        <Step title="Create the project files">\
+            Create a `.env`, `main.py` & `twilio_audio_interface.py` file  with the following code:\
+            ```\
+            conversational-ai-twilio/\
+            \uc0\u9500 \u9472 \u9472  .env\
+            \uc0\u9500 \u9472 \u9472  main.py\
+            \uc0\u9492 \u9472 \u9472  twilio_audio_interface.py\
+            ```\
+\
+            <CodeGroup>\
+\
+            ```text .env\
+            ELEVENLABS_API_KEY=<api-key-here>\
+            AGENT_ID=<agent-id-here>\
+            ```\
+\
+            ```python main.py\
+            import json\
+            import traceback\
+            import os\
+            from dotenv import load_dotenv\
+            from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect\
+            from fastapi.responses import HTMLResponse\
+            from twilio.twiml.voice_response import VoiceResponse, Connect\
+            from elevenlabs import ElevenLabs\
+            from elevenlabs.conversational_ai.conversation import Conversation\
+            from twilio_audio_interface import TwilioAudioInterface\
+\
+            # Load environment variables\
+            load_dotenv()\
+\
+            # Initialize FastAPI app\
+            app = FastAPI()\
+\
+            # Initialize ElevenLabs client\
+            elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))\
+            ELEVEN_LABS_AGENT_ID = os.getenv("AGENT_ID")\
+\
+            @app.get("/")\
+            async def root():\
+                return \{"message": "Twilio-ElevenLabs Integration Server"\}\
+\
+            @app.api_route("/twilio/inbound_call", methods=["GET", "POST"])\
+            async def handle_incoming_call(request: Request):\
+                """Handle incoming call and return TwiML response."""\
+                response = VoiceResponse()\
+                host = request.url.hostname\
+                connect = Connect()\
+                connect.stream(url=f"wss://\{host\}/media-stream-eleven")\
+                response.append(connect)\
+                return HTMLResponse(content=str(response), media_type="application/xml")\
+\
+            @app.websocket("/media-stream-eleven")\
+            async def handle_media_stream(websocket: WebSocket):\
+                await websocket.accept()\
+                print("WebSocket connection established")\
+\
+                audio_interface = TwilioAudioInterface(websocket)\
+                conversation = None\
+\
+                try:\
+                    conversation = Conversation(\
+                        client=elevenlabs,\
+                        agent_id=ELEVEN_LABS_AGENT_ID,\
+                        requires_auth=False,\
+                        audio_interface=audio_interface,\
+                        callback_agent_response=lambda text: print(f"Agent said: \{text\}"),\
+                        callback_user_transcript=lambda text: print(f"User said: \{text\}"),\
+                    )\
+\
+                    conversation.start_session()\
+                    print("Conversation session started")\
+\
+                    async for message in websocket.iter_text():\
+                        if not message:\
+                            continue\
+\
+                        try:\
+                            data = json.loads(message)\
+                            await audio_interface.handle_twilio_message(data)\
+                        except Exception as e:\
+                            print(f"Error processing message: \{str(e)\}")\
+                            traceback.print_exc()\
+\
+                except WebSocketDisconnect:\
+                    print("WebSocket disconnected")\
+                finally:\
+                    if conversation:\
+                        print("Ending conversation session...")\
+                        conversation.end_session()\
+                        conversation.wait_for_session_end()\
+\
+            if __name__ == "__main__":\
+                import uvicorn\
+                uvicorn.run(app, host="0.0.0.0", port=8000)\
+            ```\
+            ```python twilio_audio_interface.py\
+            import asyncio\
+            from typing import Callable\
+            import queue\
+            import threading\
+            import base64\
+            from elevenlabs.conversational_ai.conversation import AudioInterface\
+            import websockets\
+\
+            class TwilioAudioInterface(AudioInterface):\
+                def __init__(self, websocket):\
+                    self.websocket = websocket\
+                    self.output_queue = queue.Queue()\
+                    self.should_stop = threading.Event()\
+                    self.stream_sid = None\
+                    self.input_callback = None\
+                    self.output_thread = None\
+\
+                def start(self, input_callback: Callable[[bytes], None]):\
+                    self.input_callback = input_callback\
+                    self.output_thread = threading.Thread(target=self._output_thread)\
+                    self.output_thread.start()\
+\
+                def stop(self):\
+                    self.should_stop.set()\
+                    if self.output_thread:\
+                        self.output_thread.join(timeout=5.0)\
+                    self.stream_sid = None\
+\
+                def output(self, audio: bytes):\
+                    self.output_queue.put(audio)\
+\
+                def interrupt(self):\
+                    try:\
+                        while True:\
+                            _ = self.output_queue.get(block=False)\
+                    except queue.Empty:\
+                        pass\
+                    asyncio.run(self._send_clear_message_to_twilio())\
+\
+                async def handle_twilio_message(self, data):\
+                    try:\
+                        if data["event"] == "start":\
+                            self.stream_sid = data["start"]["streamSid"]\
+                            print(f"Started stream with stream_sid: \{self.stream_sid\}")\
+                        if data["event"] == "media":\
+                            audio_data = base64.b64decode(data["media"]["payload"])\
+                            if self.input_callback:\
+                                self.input_callback(audio_data)\
+                    except Exception as e:\
+                        print(f"Error in input_callback: \{e\}")\
+\
+                def _output_thread(self):\
+                    while not self.should_stop.is_set():\
+                        asyncio.run(self._send_audio_to_twilio())\
+\
+                async def _send_audio_to_twilio(self):\
+                    try:\
+                        audio = self.output_queue.get(timeout=0.2)\
+                        audio_payload = base64.b64encode(audio).decode("utf-8")\
+                        audio_delta = \{\
+                            "event": "media",\
+                            "streamSid": self.stream_sid,\
+                            "media": \{"payload": audio_payload\},\
+                        \}\
+                        await self.websocket.send_json(audio_delta)\
+                    except queue.Empty:\
+                        pass\
+                    except Exception as e:\
+                        print(f"Error sending audio: \{e\}")\
+\
+                async def _send_clear_message_to_twilio(self):\
+                    try:\
+                        clear_message = \{"event": "clear", "streamSid": self.stream_sid\}\
+                        await self.websocket.send_json(clear_message)\
+                    except Exception as e:\
+                        print(f"Error sending clear message to Twilio: \{e\}")\
+                ```\
+\
+            </CodeGroup>\
+            </Step>\
+            <Step title="Run the server">\
+            You can now run the server with the following command:\
+            ```bash\
+            python main.py\
+            ```\
+        </Step>\
+        </Steps>\
+\
+  </Tab>\
+</Tabs>\
+\
+## Twilio Setup\
+\
+<Steps>\
+  <Step title="Create a Public URL">\
+    Use ngrok to make your local server accessible:\
+    ```bash\
+    ngrok http --url=<your-url-here> 8000\
+    ```\
+    <Frame background="subtle">![](file:f0891345-f65d-4861-80c0-32cdcb022e49)</Frame>\
+  </Step>\
+\
+  <Step title="Configure Twilio">\
+    1. Go to the [Twilio Console](https://console.twilio.com)\
+    2. Navigate to `Phone Numbers` \uc0\u8594  `Manage` \u8594  `Active numbers`\
+    3. Select your phone number\
+    4. Under "Voice Configuration", set the webhook for incoming calls to:\
+       `https://your-ngrok-url.ngrok.app/twilio/inbound_call`\
+    5. Set the HTTP method to POST\
+\
+    <Frame background="subtle">![](file:e1baed31-0f44-4ce0-a7e4-b301488590ff)</Frame>\
+\
+  </Step>\
+</Steps>\
+\
+## Testing\
+\
+1. Call your Twilio phone number.\
+2. Start speaking - you'll see the transcripts in the ElevenLabs console.\
+\
+## Troubleshooting\
+\
+<AccordionGroup>\
+    <Accordion title="Connection Issues">\
+    If the WebSocket connection fails:\
+    - Verify your ngrok URL is correct in Twilio settings\
+    - Check that your server is running and accessible\
+    - Ensure your firewall isn't blocking WebSocket connections\
+    </Accordion>\
+\
+    <Accordion title="Audio Problems">\
+    If there's no audio output:\
+    - Confirm your ElevenLabs API key is valid\
+    - Verify the AGENT_ID is correct\
+    - Check audio format settings match Twilio's requirements (\uc0\u956 -law 8kHz)\
+    </Accordion>\
+\
+</AccordionGroup>\
+\
+## Security Best Practices\
+\
+<Warning>\
+  Follow these security guidelines for production deployments:\
+  <>\
+    - Use environment variables for sensitive information - Implement proper authentication for your\
+    endpoints - Use HTTPS for all communications - Regularly rotate API keys - Monitor usage to\
+    prevent abuse\
+  </>\
+</Warning>\
+---\
+title: Twilio outbound calls\
+subtitle: Build an outbound calling AI agent with Twilio and ElevenLabs.\
+---\
+\
+<Warning>\
+  **Outbound calls are now natively supported**, see guide\
+  [here](/docs/conversational-ai/phone-numbers/twilio-integration/native-integration#making-outbound-calls)\
+  We recommend using the native integration instead of this guide.\
+</Warning>\
+\
+In this guide you will learn how to build an integration with Twilio to initialise outbound calls to your prospects and customers.\
+\
+<iframe\
+  width="100%"\
+  height="400"\
+  src="https://www.youtube-nocookie.com/embed/fmIvK0Na_IU"\
+  title="YouTube video player"\
+  frameborder="0"\
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"\
+  allowfullscreen\
+></iframe>\
+\
+<Tip title="Prefer to jump straight to the code?" icon="lightbulb">\
+  Find the [example project on\
+  GitHub](https://github.com/elevenlabs/elevenlabs-examples/tree/main/examples/conversational-ai/twilio/javascript).\
+</Tip>\
+\
+## What You'll Need\
+\
+- An [ElevenLabs account](https://elevenlabs.io).\
+- A configured ElevenLabs Conversational Agent ([create one here](/docs/conversational-ai/quickstart)).\
+- A [Twilio account](https://www.twilio.com/try-twilio) with an active phone number.\
+- Node.js 16+\
+- [ngrok](https://ngrok.com/) for local development.\
+\
+## Agent Configuration\
+\
+Before integrating with Twilio, you'll need to configure your agent to use the correct audio format supported by Twilio.\
+\
+<Steps>\
+  <Step title="Configure TTS Output">\
+    1. Navigate to your agent settings.\
+    2. Go to the Voice section.\
+    3. Select "\uc0\u956 -law 8000 Hz" from the dropdown.\
+\
+   <Frame background="subtle">![](file:0034ff8e-2925-47b7-9b95-0d0424bcf0cf)</Frame>\
+  </Step>\
+\
+<Step title="Set Input Format">\
+  1. Navigate to your agent settings. 2. Go to the Advanced section. 3. Select "\uc0\u956 -law 8000 Hz" for\
+  the input format.\
+  <Frame background="subtle">![](file:da50c783-15c1-4f7c-99eb-270eec168f46)</Frame>\
+</Step>\
+\
+  <Step title="Enable auth and overrides">\
+    1. Navigate to your agent settings.\
+    2. Go to the security section.\
+    3. Toggle on "Enable authentication".\
+    4. In "Enable overrides" toggle on "First message" and "System prompt" as you will be dynamically injecting these values when initiating the call.\
+\
+    <Frame background="subtle">![](file:457655af-4b2d-4aa5-a334-ea5ea5e61593)</Frame>\
+\
+  </Step>\
+</Steps>\
+\
+## Implementation\
+\
+<Tabs>\
+  <Tab title="Javascript">\
+\
+    <Note>\
+        Looking for a complete example? Check out this [Javascript implementation](https://github.com/elevenlabs/elevenlabs-examples/tree/main/examples/conversational-ai/twilio/javascript) on GitHub.\
+    </Note>\
+\
+    <Steps>\
+        <Step title="Initialize the Project">\
+            First, set up a new Node.js project:\
+            ```bash\
+            mkdir conversational-ai-twilio\
+            cd conversational-ai-twilio\
+            npm init -y; npm pkg set type="module";\
+            ```\
+        </Step>\
+\
+        <Step title="Install dependencies">\
+            Next, install the required dependencies for the project.\
+            ```bash\
+            npm install @fastify/formbody @fastify/websocket dotenv fastify ws twilio\
+            ```\
+        </Step>\
+        <Step title="Create the project files">\
+            Create a `.env` and `outbound.js` file  with the following code:\
+\
+<CodeGroup>\
+\
+```text .env\
+ELEVENLABS_AGENT_ID=<your-agent-id>\
+ELEVENLABS_API_KEY=<your-api-key>\
+\
+# Twilio\
+TWILIO_ACCOUNT_SID=<your-account-sid>\
+TWILIO_AUTH_TOKEN=<your-auth-token>\
+TWILIO_PHONE_NUMBER=<your-twilio-phone-number>\
+```\
+\
+```javascript outbound.js\
+import fastifyFormBody from '@fastify/formbody';\
+import fastifyWs from '@fastify/websocket';\
+import dotenv from 'dotenv';\
+import Fastify from 'fastify';\
+import Twilio from 'twilio';\
+import WebSocket from 'ws';\
+\
+// Load environment variables from .env file\
+dotenv.config();\
+\
+// Check for required environment variables\
+const \{\
+  ELEVENLABS_API_KEY,\
+  ELEVENLABS_AGENT_ID,\
+  TWILIO_ACCOUNT_SID,\
+  TWILIO_AUTH_TOKEN,\
+  TWILIO_PHONE_NUMBER,\
+\} = process.env;\
+\
+if (\
+  !ELEVENLABS_API_KEY ||\
+  !ELEVENLABS_AGENT_ID ||\
+  !TWILIO_ACCOUNT_SID ||\
+  !TWILIO_AUTH_TOKEN ||\
+  !TWILIO_PHONE_NUMBER\
+) \{\
+  console.error('Missing required environment variables');\
+  throw new Error('Missing required environment variables');\
+\}\
+\
+// Initialize Fastify server\
+const fastify = Fastify();\
+fastify.register(fastifyFormBody);\
+fastify.register(fastifyWs);\
+\
+const PORT = process.env.PORT || 8000;\
+\
+// Root route for health check\
+fastify.get('/', async (_, reply) => \{\
+  reply.send(\{ message: 'Server is running' \});\
+\});\
+\
+// Initialize Twilio client\
+const twilioClient = new Twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);\
+\
+// Helper function to get signed URL for authenticated conversations\
+async function getSignedUrl() \{\
+  try \{\
+    const response = await fetch(\
+      `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=$\{ELEVENLABS_AGENT_ID\}`,\
+      \{\
+        method: 'GET',\
+        headers: \{\
+          'xi-api-key': ELEVENLABS_API_KEY,\
+        \},\
+      \}\
+    );\
+\
+    if (!response.ok) \{\
+      throw new Error(`Failed to get signed URL: $\{response.statusText\}`);\
+    \}\
+\
+    const data = await response.json();\
+    return data.signed_url;\
+  \} catch (error) \{\
+    console.error('Error getting signed URL:', error);\
+    throw error;\
+  \}\
+\}\
+\
+// Route to initiate outbound calls\
+fastify.post('/outbound-call', async (request, reply) => \{\
+  const \{ number, prompt, first_message \} = request.body;\
+\
+  if (!number) \{\
+    return reply.code(400).send(\{ error: 'Phone number is required' \});\
+  \}\
+\
+  try \{\
+    const call = await twilioClient.calls.create(\{\
+      from: TWILIO_PHONE_NUMBER,\
+      to: number,\
+      url: `https://$\{request.headers.host\}/outbound-call-twiml?prompt=$\{encodeURIComponent(\
+        prompt\
+      )\}&first_message=$\{encodeURIComponent(first_message)\}`,\
+    \});\
+\
+    reply.send(\{\
+      success: true,\
+      message: 'Call initiated',\
+      callSid: call.sid,\
+    \});\
+  \} catch (error) \{\
+    console.error('Error initiating outbound call:', error);\
+    reply.code(500).send(\{\
+      success: false,\
+      error: 'Failed to initiate call',\
+    \});\
+  \}\
+\});\
+\
+// TwiML route for outbound calls\
+fastify.all('/outbound-call-twiml', async (request, reply) => \{\
+  const prompt = request.query.prompt || '';\
+  const first_message = request.query.first_message || '';\
+\
+  const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>\
+    <Response>\
+        <Connect>\
+        <Stream url="wss://$\{request.headers.host\}/outbound-media-stream">\
+            <Parameter name="prompt" value="$\{prompt\}" />\
+            <Parameter name="first_message" value="$\{first_message\}" />\
+        </Stream>\
+        </Connect>\
+    </Response>`;\
+\
+  reply.type('text/xml').send(twimlResponse);\
+\});\
+\
+// WebSocket route for handling media streams\
+fastify.register(async (fastifyInstance) => \{\
+  fastifyInstance.get('/outbound-media-stream', \{ websocket: true \}, (ws, req) => \{\
+    console.info('[Server] Twilio connected to outbound media stream');\
+\
+    // Variables to track the call\
+    let streamSid = null;\
+    let callSid = null;\
+    let elevenLabsWs = null;\
+    let customParameters = null; // Add this to store parameters\
+\
+    // Handle WebSocket errors\
+    ws.on('error', console.error);\
+\
+    // Set up ElevenLabs connection\
+    const setupElevenLabs = async () => \{\
+      try \{\
+        const signedUrl = await getSignedUrl();\
+        elevenLabsWs = new WebSocket(signedUrl);\
+\
+        elevenLabsWs.on('open', () => \{\
+          console.log('[ElevenLabs] Connected to Conversational AI');\
+\
+          // Send initial configuration with prompt and first message\
+          const initialConfig = \{\
+            type: 'conversation_initiation_client_data',\
+            dynamic_variables: \{\
+              user_name: 'Angelo',\
+              user_id: 1234,\
+            \},\
+            conversation_config_override: \{\
+              agent: \{\
+                prompt: \{\
+                  prompt: customParameters?.prompt || 'you are a gary from the phone store',\
+                \},\
+                first_message:\
+                  customParameters?.first_message || 'hey there! how can I help you today?',\
+              \},\
+            \},\
+          \};\
+\
+          console.log(\
+            '[ElevenLabs] Sending initial config with prompt:',\
+            initialConfig.conversation_config_override.agent.prompt.prompt\
+          );\
+\
+          // Send the configuration to ElevenLabs\
+          elevenLabsWs.send(JSON.stringify(initialConfig));\
+        \});\
+\
+        elevenLabsWs.on('message', (data) => \{\
+          try \{\
+            const message = JSON.parse(data);\
+\
+            switch (message.type) \{\
+              case 'conversation_initiation_metadata':\
+                console.log('[ElevenLabs] Received initiation metadata');\
+                break;\
+\
+              case 'audio':\
+                if (streamSid) \{\
+                  if (message.audio?.chunk) \{\
+                    const audioData = \{\
+                      event: 'media',\
+                      streamSid,\
+                      media: \{\
+                        payload: message.audio.chunk,\
+                      \},\
+                    \};\
+                    ws.send(JSON.stringify(audioData));\
+                  \} else if (message.audio_event?.audio_base_64) \{\
+                    const audioData = \{\
+                      event: 'media',\
+                      streamSid,\
+                      media: \{\
+                        payload: message.audio_event.audio_base_64,\
+                      \},\
+                    \};\
+                    ws.send(JSON.stringify(audioData));\
+                  \}\
+                \} else \{\
+                  console.log('[ElevenLabs] Received audio but no StreamSid yet');\
+                \}\
+                break;\
+\
+              case 'interruption':\
+                if (streamSid) \{\
+                  ws.send(\
+                    JSON.stringify(\{\
+                      event: 'clear',\
+                      streamSid,\
+                    \})\
+                  );\
+                \}\
+                break;\
+\
+              case 'ping':\
+                if (message.ping_event?.event_id) \{\
+                  elevenLabsWs.send(\
+                    JSON.stringify(\{\
+                      type: 'pong',\
+                      event_id: message.ping_event.event_id,\
+                    \})\
+                  );\
+                \}\
+                break;\
+\
+              case 'agent_response':\
+                console.log(\
+                  `[Twilio] Agent response: $\{message.agent_response_event?.agent_response\}`\
+                );\
+                break;\
+\
+              case 'user_transcript':\
+                console.log(\
+                  `[Twilio] User transcript: $\{message.user_transcription_event?.user_transcript\}`\
+                );\
+                break;\
+\
+              default:\
+                console.log(`[ElevenLabs] Unhandled message type: $\{message.type\}`);\
+            \}\
+          \} catch (error) \{\
+            console.error('[ElevenLabs] Error processing message:', error);\
+          \}\
+        \});\
+\
+        elevenLabsWs.on('error', (error) => \{\
+          console.error('[ElevenLabs] WebSocket error:', error);\
+        \});\
+\
+        elevenLabsWs.on('close', () => \{\
+          console.log('[ElevenLabs] Disconnected');\
+        \});\
+      \} catch (error) \{\
+        console.error('[ElevenLabs] Setup error:', error);\
+      \}\
+    \};\
+\
+    // Set up ElevenLabs connection\
+    setupElevenLabs();\
+\
+    // Handle messages from Twilio\
+    ws.on('message', (message) => \{\
+      try \{\
+        const msg = JSON.parse(message);\
+        if (msg.event !== 'media') \{\
+          console.log(`[Twilio] Received event: $\{msg.event\}`);\
+        \}\
+\
+        switch (msg.event) \{\
+          case 'start':\
+            streamSid = msg.start.streamSid;\
+            callSid = msg.start.callSid;\
+            customParameters = msg.start.customParameters; // Store parameters\
+            console.log(`[Twilio] Stream started - StreamSid: $\{streamSid\}, CallSid: $\{callSid\}`);\
+            console.log('[Twilio] Start parameters:', customParameters);\
+            break;\
+\
+          case 'media':\
+            if (elevenLabsWs?.readyState === WebSocket.OPEN) \{\
+              const audioMessage = \{\
+                user_audio_chunk: Buffer.from(msg.media.payload, 'base64').toString('base64'),\
+              \};\
+              elevenLabsWs.send(JSON.stringify(audioMessage));\
+            \}\
+            break;\
+\
+          case 'stop':\
+            console.log(`[Twilio] Stream $\{streamSid\} ended`);\
+            if (elevenLabsWs?.readyState === WebSocket.OPEN) \{\
+              elevenLabsWs.close();\
+            \}\
+            break;\
+\
+          default:\
+            console.log(`[Twilio] Unhandled event: $\{msg.event\}`);\
+        \}\
+      \} catch (error) \{\
+        console.error('[Twilio] Error processing message:', error);\
+      \}\
+    \});\
+\
+    // Handle WebSocket closure\
+    ws.on('close', () => \{\
+      console.log('[Twilio] Client disconnected');\
+      if (elevenLabsWs?.readyState === WebSocket.OPEN) \{\
+        elevenLabsWs.close();\
+      \}\
+    \});\
+  \});\
+\});\
+\
+// Start the Fastify server\
+fastify.listen(\{ port: PORT \}, (err) => \{\
+  if (err) \{\
+    console.error('Error starting server:', err);\
+    process.exit(1);\
+  \}\
+  console.log(`[Server] Listening on port $\{PORT\}`);\
+\});\
+```\
+\
+</CodeGroup>\
+\
+        </Step>\
+\
+        <Step title="Run the server">\
+            You can now run the server with the following command:\
+            ```bash\
+            node outbound.js\
+            ```\
+            If the server starts successfully, you should see the message `[Server] Listening on port 8000` (or the port you specified) in your terminal.\
+        </Step>\
+\
+\
+    </Steps>\
+    </Tab>\
+\
+</Tabs>\
+\
+## Testing\
+\
+1. In another terminal, run `ngrok http --url=<your-url-here> 8000`.\
+2. Make a request to the `/outbound-call` endpoint with the customer's phone number, the first message you want to use and the custom prompt:\
+\
+```bash\
+curl -X POST https://<your-ngrok-url>/outbound-call \\\
+-H "Content-Type: application/json" \\\
+-d '\{\
+    "prompt": "You are Eric, an outbound car sales agent. You are calling to sell a new car to the customer. Be friendly and professional and answer all questions.",\
+    "first_message": "Hello Thor, my name is Eric, I heard you were looking for a new car! What model and color are you looking for?",\
+    "number": "number-to-call"\
+    \}'\
+```\
+\
+3. You will see the call get initiated in your server terminal window and your phone will ring, starting the conversation once you answer.\
+\
+## Troubleshooting\
+\
+<AccordionGroup>\
+    <Accordion title="Connection Issues">\
+    If the WebSocket connection fails:\
+    - Verify your ngrok URL is correct in Twilio settings\
+    - Check that your server is running and accessible\
+    - Ensure your firewall isn't blocking WebSocket connections\
+    </Accordion>\
+\
+    <Accordion title="Audio Problems">\
+    If there's no audio output:\
+    - Confirm your ElevenLabs API key is valid\
+    - Verify the AGENT_ID is correct\
+    - Check audio format settings match Twilio's requirements (\uc0\u956 -law 8kHz)\
+    </Accordion>\
+\
+</AccordionGroup>\
+\
+## Security Best Practices\
+\
+<Warning>\
+  Follow these security guidelines for production deployments:\
+  <>\
+    - Use environment variables for sensitive information - Implement proper authentication for your\
+    endpoints - Use HTTPS for all communications - Regularly rotate API keys - Monitor usage to\
+    prevent abuse\
+  </>\
+</Warning>\
+\
+---\
+title: Python SDK\
+subtitle: 'Conversational AI SDK: deploy customized, interactive voice agents in minutes.'\
+---\
+\
+<Info>Also see the [Conversational AI overview](/docs/conversational-ai/overview)</Info>\
+\
+## Installation\
+\
+Install the `elevenlabs` Python package in your project:\
+\
+```shell\
+pip install elevenlabs\
+# or\
+poetry add elevenlabs\
+```\
+\
+If you want to use the default implementation of audio input/output you will also need the `pyaudio` extra:\
+\
+```shell\
+pip install "elevenlabs[pyaudio]"\
+# or\
+poetry add "elevenlabs[pyaudio]"\
+```\
+\
+<Info>\
+The `pyaudio` package installation might require additional system dependencies.\
+\
+See [PyAudio package README](https://pypi.org/project/PyAudio/) for more information.\
+\
+<Tabs>\
+<Tab title="Linux">\
+On Debian-based systems you can install the dependencies with:\
+\
+```shell\
+sudo apt install portaudio19\
+```\
+\
+</Tab>\
+<Tab title="macOS">\
+On macOS with Homebrew you can install the dependencies with:\
+```shell\
+brew install portaudio\
+```\
+</Tab>\
+</Tabs>\
+</Info>\
+\
+## Usage\
+\
+In this example we will create a simple script that runs a conversation with the ElevenLabs Conversational AI agent.\
+You can find the full code in the [ElevenLabs examples repository](https://github.com/elevenlabs/elevenlabs-examples/tree/main/examples/conversational-ai/python).\
+\
+First import the necessary dependencies:\
+\
+```python\
+import os\
+import signal\
+\
+from elevenlabs.client import ElevenLabs\
+from elevenlabs.conversational_ai.conversation import Conversation\
+from elevenlabs.conversational_ai.default_audio_interface import DefaultAudioInterface\
+```\
+\
+Next load the agent ID and API key from environment variables:\
+\
+```python\
+agent_id = os.getenv("AGENT_ID")\
+api_key = os.getenv("ELEVENLABS_API_KEY")\
+```\
+\
+The API key is only required for non-public agents that have authentication enabled.\
+You don't have to set it for public agents and the code will work fine without it.\
+\
+Then create the `ElevenLabs` client instance:\
+\
+```python\
+elevenlabs = ElevenLabs(api_key=api_key)\
+```\
+\
+Now we initialize the `Conversation` instance:\
+\
+```python\
+conversation = Conversation(\
+    # API client and agent ID.\
+    elevenlabs,\
+    agent_id,\
+\
+    # Assume auth is required when API_KEY is set.\
+    requires_auth=bool(api_key),\
+\
+    # Use the default audio interface.\
+    audio_interface=DefaultAudioInterface(),\
+\
+    # Simple callbacks that print the conversation to the console.\
+    callback_agent_response=lambda response: print(f"Agent: \{response\}"),\
+    callback_agent_response_correction=lambda original, corrected: print(f"Agent: \{original\} -> \{corrected\}"),\
+    callback_user_transcript=lambda transcript: print(f"User: \{transcript\}"),\
+\
+    # Uncomment if you want to see latency measurements.\
+    # callback_latency_measurement=lambda latency: print(f"Latency: \{latency\}ms"),\
+)\
+```\
+\
+We are using the `DefaultAudioInterface` which uses the default system audio input/output devices for the conversation.\
+You can also implement your own audio interface by subclassing `elevenlabs.conversational_ai.conversation.AudioInterface`.\
+\
+Now we can start the conversation:\
+\
+```python\
+conversation.start_session()\
+```\
+\
+To get a clean shutdown when the user presses `Ctrl+C` we can add a signal handler which will call `end_session()`:\
+\
+```python\
+signal.signal(signal.SIGINT, lambda sig, frame: conversation.end_session())\
+```\
+\
+And lastly we wait for the conversation to end and print out the conversation ID (which can be used for reviewing the conversation history and debugging):\
+\
+```python\
+conversation_id = conversation.wait_for_session_end()\
+print(f"Conversation ID: \{conversation_id\}")\
+```\
+\
+All that is left is to run the script and start talking to the agent:\
+\
+```shell\
+# For public agents:\
+AGENT_ID=youragentid python demo.py\
+\
+# For private agents:\
+AGENT_ID=youragentid ELEVENLABS_API_KEY=yourapikey python demo.py\
+```\
+\
+---\
+title: React SDK\
+subtitle: 'Conversational AI SDK: deploy customized, interactive voice agents in minutes.'\
+---\
+\
+<Info>Also see the [Conversational AI overview](/docs/conversational-ai/overview)</Info>\
+\
+## Installation\
+\
+Install the package in your project through package manager.\
+\
+```shell\
+npm install @11labs/react\
+# or\
+yarn add @11labs/react\
+# or\
+pnpm install @11labs/react\
+```\
+\
+## Usage\
+\
+### useConversation\
+\
+React hook for managing websocket connection and audio usage for ElevenLabs Conversational AI.\
+\
+#### Initialize conversation\
+\
+First, initialize the Conversation instance.\
+\
+```tsx\
+const conversation = useConversation();\
+```\
+\
+Note that Conversational AI requires microphone access.\
+Consider explaining and allowing access in your apps UI before the Conversation kicks off.\
+\
+```js\
+// call after explaining to the user why the microphone access is needed\
+await navigator.mediaDevices.getUserMedia(\{ audio: true \});\
+```\
+\
+#### Options\
+\
+The Conversation can be initialized with certain options. Those are all optional.\
+\
+```tsx\
+const conversation = useConversation(\{\
+  /* options object */\
+\});\
+```\
+\
+- **onConnect** - handler called when the conversation websocket connection is established.\
+- **onDisconnect** - handler called when the conversation websocket connection is ended.\
+- **onMessage** - handler called when a new message is received. These can be tentative or final transcriptions of user voice, replies produced by LLM, or debug message when a debug option is enabled.\
+- **onError** - handler called when a error is encountered.\
+\
+#### Methods\
+\
+**startSession**\
+\
+`startSession` method kick off the websocket connection and starts using microphone to communicate with the ElevenLabs Conversational AI agent.\
+The method accepts options object, with the `url` or `agentId` option being required.\
+\
+Agent ID can be acquired through [ElevenLabs UI](https://elevenlabs.io/app/conversational-ai) and is always necessary.\
+\
+```js\
+const conversation = useConversation();\
+const conversationId = await conversation.startSession(\{ url \});\
+```\
+\
+For the public agents, define `agentId` - no signed link generation necessary.\
+\
+In case the conversation requires authorization, use the REST API to generate signed links. Use the signed link as a `url` parameter.\
+\
+`startSession` returns promise resolving to `conversationId`. The value is a globally unique conversation ID you can use to identify separate conversations.\
+\
+```js\
+// your server\
+const requestHeaders: HeadersInit = new Headers();\
+requestHeaders.set("xi-api-key", process.env.XI_API_KEY); // use your ElevenLabs API key\
+\
+const response = await fetch(\
+  "https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=\{\{agent id created through ElevenLabs UI\}\}",\
+  \{\
+    method: "GET",\
+    headers: requestHeaders,\
+  \}\
+);\
+\
+if (!response.ok) \{\
+  return Response.error();\
+\}\
+\
+const body = await response.json();\
+const url = body.signed_url; // use this URL for startSession method.\
+```\
+\
+**endSession**\
+\
+A method to manually end the conversation. The method will end the conversation and disconnect from websocket.\
+\
+```js\
+await conversation.endSession();\
+```\
+\
+**setVolume**\
+\
+A method to set the output volume of the conversation. Accepts object with volume field between 0 and 1.\
+\
+```js\
+await conversation.setVolume(\{ volume: 0.5 \});\
+```\
+\
+**status**\
+\
+A React state containing the current status of the conversation.\
+\
+```js\
+const \{ status \} = useConversation();\
+console.log(status); // "connected" or "disconnected"\
+```\
+\
+**isSpeaking**\
+\
+A React state containing the information of whether the agent is currently speaking.\
+This is helpful for indicating the mode in your UI.\
+\
+```js\
+const \{ isSpeaking \} = useConversation();\
+console.log(isSpeaking); // boolean\
+```\
+---\
+title: JavaScript SDK\
+subtitle: 'Conversational AI SDK: deploy customized, interactive voice agents in minutes.'\
+---\
+\
+<Info>Also see the [Conversational AI overview](/docs/conversational-ai/overview)</Info>\
+\
+## Installation\
+\
+Install the package in your project through package manager.\
+\
+```shell\
+npm install @11labs/client\
+# or\
+yarn add @11labs/client\
+# or\
+pnpm install @11labs/client\
+```\
+\
+## Usage\
+\
+This library is primarily meant for development in vanilla JavaScript projects, or as a base for libraries tailored to specific frameworks.\
+It is recommended to check whether your specific framework has it's own library.\
+However, you can use this library in any JavaScript-based project.\
+\
+### Initialize conversation\
+\
+First, initialize the Conversation instance:\
+\
+```js\
+const conversation = await Conversation.startSession(options);\
+```\
+\
+This will kick off the websocket connection and start using microphone to communicate with the ElevenLabs Conversational AI agent. Consider explaining and allowing microphone access in your apps UI before the Conversation kicks off:\
+\
+```js\
+// call after explaining to the user why the microphone access is needed\
+await navigator.mediaDevices.getUserMedia(\{ audio: true \});\
+```\
+\
+#### Session configuration\
+\
+The options passed to `startSession` specifiy how the session is established. There are two ways to start a session:\
+\
+**Using Agent ID**\
+\
+Agent ID can be acquired through [ElevenLabs UI](https://elevenlabs.io/app/conversational-ai).\
+For public agents, you can use the ID directly:\
+\
+```js\
+const conversation = await Conversation.startSession(\{\
+  agentId: '<your-agent-id>',\
+\});\
+```\
+\
+**Using a signed URL**\
+\
+If the conversation requires authorization, you will need to add a dedicated endpoint to your server that\
+will request a signed url using the [ElevenLabs API](https://elevenlabs.io/docs/introduction) and pass it back to the client.\
+\
+Here's an example of how it could be set up:\
+\
+```js\
+// Node.js server\
+\
+app.get('/signed-url', yourAuthMiddleware, async (req, res) => \{\
+  const response = await fetch(\
+    `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=$\{process.env.AGENT_ID\}`,\
+    \{\
+      method: 'GET',\
+      headers: \{\
+        // Requesting a signed url requires your ElevenLabs API key\
+        // Do NOT expose your API key to the client!\
+        'xi-api-key': process.env.XI_API_KEY,\
+      \},\
+    \}\
+  );\
+\
+  if (!response.ok) \{\
+    return res.status(500).send('Failed to get signed URL');\
+  \}\
+\
+  const body = await response.json();\
+  res.send(body.signed_url);\
+\});\
+```\
+\
+```js\
+// Client\
+\
+const response = await fetch('/signed-url', yourAuthHeaders);\
+const signedUrl = await response.text();\
+\
+const conversation = await Conversation.startSession(\{ signedUrl \});\
+```\
+\
+#### Optional callbacks\
+\
+The options passed to `startSession` can also be used to register optional callbacks:\
+\
+- **onConnect** - handler called when the conversation websocket connection is established.\
+- **onDisconnect** - handler called when the conversation websocket connection is ended.\
+- **onMessage** - handler called when a new text message is received. These can be tentative or final transcriptions of user voice, replies produced by LLM. Primarily used for handling conversation transcription.\
+- **onError** - handler called when an error is encountered.\
+- **onStatusChange** - handler called whenever connection status changes. Can be `connected`, `connecting` and `disconnected` (initial).\
+- **onModeChange** - handler called when a status changes, eg. agent switches from `speaking` to `listening`, or the other way around.\
+\
+#### Return value\
+\
+`startSession` returns a `Conversation` instance that can be used to control the session. The method will throw an error if the session cannot be established. This can happen if the user denies microphone access, or if the websocket connection\
+fails.\
+\
+**endSession**\
+\
+A method to manually end the conversation. The method will end the conversation and disconnect from websocket.\
+Afterwards the conversation instance will be unusable and can be safely discarded.\
+\
+```js\
+await conversation.endSession();\
+```\
+\
+**getId**\
+\
+A method returning the conversation ID.\
+\
+```js\
+const id = conversation.getId();\
+```\
+\
+**setVolume**\
+\
+A method to set the output volume of the conversation. Accepts object with volume field between 0 and 1.\
+\
+```js\
+await conversation.setVolume(\{ volume: 0.5 \});\
+```\
+\
+**getInputVolume / getOutputVolume**\
+\
+Methods that return the current input/output volume on a scale from `0` to `1` where `0` is -100 dB and `1` is -30 dB.\
+\
+```js\
+const inputVolume = await conversation.getInputVolume();\
+const outputVolume = await conversation.getOutputVolume();\
+```\
+\
+**getInputByteFrequencyData / getOutputByteFrequencyData**\
+\
+Methods that return `Uint8Array`s containg the current input/output frequency data. See [AnalyserNode.getByteFrequencyData](https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode/getByteFrequencyData) for more information.\
+---\
+title: Swift SDK\
+subtitle: >-\
+  Conversational AI SDK: deploy customized, interactive voice agents in your\
+  Swift applications.\
+---\
+\
+<Info>Also see the [Conversational AI overview](/docs/conversational-ai/overview)</Info>\
+\
+## Installation\
+\
+Add the ElevenLabs Swift SDK to your project using Swift Package Manager:\
+\
+<Steps>\
+  <Step title="Add the Package Dependency">\
+  <>\
+    1. Open your project in Xcode\
+    2. Go to `File` > `Add Packages...`\
+    3. Enter the repository URL: `https://github.com/elevenlabs/ElevenLabsSwift`\
+    4. Select your desired version\
+  </>\
+\
+  </Step>\
+  <Step title="Import the SDK">\
+   <>\
+     ```swift\
+     import ElevenLabsSDK\
+      ```\
+   </>\
+\
+  </Step>\
+</Steps>\
+\
+<Warning>\
+  Ensure you add `NSMicrophoneUsageDescription` to your Info.plist to explain microphone access to\
+  users.\
+</Warning>\
+\
+## Usage\
+\
+This library is primarily designed for Conversational AI integration in Swift applications. Please use an alternative dependency for other features, such as speech synthesis.\
+\
+### Initialize Conversation\
+\
+First, create a session configuration and set up the necessary callbacks:\
+\
+```swift\
+// Configure the session\
+let config = ElevenLabsSDK.SessionConfig(agentId: "your-agent-id")\
+\
+// Set up callbacks\
+var callbacks = ElevenLabsSDK.Callbacks()\
+callbacks.onConnect = \{ conversationId in\
+    print("Connected with ID: \\(conversationId)")\
+\}\
+callbacks.onDisconnect = \{\
+    print("Disconnected")\
+\}\
+callbacks.onMessage = \{ message, role in\
+    print("\\(role.rawValue): \\(message)")\
+\}\
+callbacks.onError = \{ error, info in\
+    print("Error: \\(error), Info: \\(String(describing: info))")\
+\}\
+callbacks.onStatusChange = \{ status in\
+    print("Status changed to: \\(status.rawValue)")\
+\}\
+callbacks.onModeChange = \{ mode in\
+    print("Mode changed to: \\(mode.rawValue)")\
+\}\
+callbacks.onVolumeUpdate = \{ volume in\
+    print("Volume updated: \\(volume)")\
+\}\
+```\
+\
+### Session Configuration\
+\
+There are two ways to initialize a session:\
+\
+<Tabs>\
+  <Tab title="Using Agent ID">\
+    You can obtain an Agent ID through the [ElevenLabs UI](https://elevenlabs.io/app/conversational-ai):\
+    ```swift\
+    let config = ElevenLabsSDK.SessionConfig(agentId: "<your-agent-id>")\
+    ```\
+  </Tab>\
+  <Tab title="Using Signed URL">\
+    For conversations requiring authorization, implement a server endpoint that requests a signed URL:\
+    ```swift\
+    // Swift example using URLSession\
+    func getSignedUrl() async throws -> String \{\
+        let url = URL(string: "https://api.elevenlabs.io/v1/convai/conversation/get-signed-url")!\
+        var request = URLRequest(url: url)\
+        request.setValue("YOUR-API-KEY", forHTTPHeaderField: "xi-api-key")\
+\
+        let (data, _) = try await URLSession.shared.data(for: request)\
+        let response = try JSONDecoder().decode(SignedUrlResponse.self, from: data)\
+        return response.signedUrl\
+    \}\
+\
+    // Use the signed URL\
+    let signedUrl = try await getSignedUrl()\
+    let config = ElevenLabsSDK.SessionConfig(signedUrl: signedUrl)\
+    ```\
+\
+  </Tab>\
+</Tabs>\
+\
+### Client Tools\
+\
+Client Tools allow you to register custom functions that can be called by your AI agent during conversations. This enables your agent to perform actions in your application.\
+\
+#### Registering Tools\
+\
+Register custom tools before starting a conversation:\
+\
+```swift\
+// Create client tools instance\
+var clientTools = ElevenLabsSDK.ClientTools()\
+\
+// Register a custom tool with an async handler\
+clientTools.register("generate_joke") \{ parameters async throws -> String? in\
+    // Parameters is a [String: Any] dictionary\
+    guard let joke = parameters["joke"] as? String else \{\
+        throw ElevenLabsSDK.ClientToolError.invalidParameters\
+    \}\
+    print("generate_joke tool received joke: \\(joke)")\
+\
+    return joke\
+\}\
+```\
+\
+<Info>\
+  Remember to setup your agent with the client-tools in the ElevenLabs UI. See the [Client Tools\
+  documentation](/docs/conversational-ai/customization/tools/client-tools) for setup instructions.\
+</Info>\
+\
+### Starting the Conversation\
+\
+Initialize the conversation session asynchronously:\
+\
+```swift\
+Task \{\
+    do \{\
+        let conversation = try await ElevenLabsSDK.Conversation.startSession(\
+            config: config,\
+            callbacks: callbacks,\
+            clientTools: clientTools // Optional: pass the previously configured client tools\
+        )\
+        // Use the conversation instance\
+    \} catch \{\
+        print("Failed to start conversation: \\(error)")\
+    \}\
+\}\
+```\
+\
+<Note>\
+  The client tools parameter is optional. If you don't need custom tools, you can omit it when\
+  starting the session.\
+</Note>\
+\
+### Audio Sample Rates\
+\
+The ElevenLabs SDK currently uses a default input sample rate of `16,000 Hz`. However, the output sample rate is configurable based on the agent's settings. Ensure that the output sample rate aligns with your specific application's audio requirements for smooth interaction.\
+\
+<Note>\
+\
+The SDK does not currently support ulaw format for audio encoding. For compatibility, consider using alternative formats.\
+\
+</Note>\
+\
+### Managing the Session\
+\
+<CodeGroup>\
+  ```swift:End Session\
+  // Starts the session\
+  conversation.startSession()\
+  // Ends the session\
+  conversation.endSession()\
+  ```\
+\
+```swift:Recording Controls\
+// Start recording\
+conversation.startRecording()\
+\
+// Stop recording\
+conversation.stopRecording()\
+```\
+\
+</CodeGroup>\
+\
+### Example Implementation\
+\
+For a full, working example, check out the [example application on GitHub](https://github.com/elevenlabs/elevenlabs-examples/tree/main/examples/conversational-ai/swift).\
+\
+Here's an example SwiftUI view implementing the conversation interface:\
+\
+```swift\
+struct ConversationalAIView: View \{\
+    @State private var conversation: ElevenLabsSDK.Conversation?\
+    @State private var mode: ElevenLabsSDK.Mode = .listening\
+    @State private var status: ElevenLabsSDK.Status = .disconnected\
+    @State private var audioLevel: Float = 0.0\
+\
+    private func startConversation() \{\
+        Task \{\
+            do \{\
+                let config = ElevenLabsSDK.SessionConfig(agentId: "your-agent-id")\
+                var callbacks = ElevenLabsSDK.Callbacks()\
+\
+                callbacks.onConnect = \{ conversationId in\
+                    status = .connected\
+                \}\
+                callbacks.onDisconnect = \{\
+                    status = .disconnected\
+                \}\
+                callbacks.onModeChange = \{ newMode in\
+                    DispatchQueue.main.async \{\
+                        mode = newMode\
+                    \}\
+                \}\
+                callbacks.onVolumeUpdate = \{ newVolume in\
+                    DispatchQueue.main.async \{\
+                        audioLevel = newVolume\
+                    \}\
+                \}\
+\
+                conversation = try await ElevenLabsSDK.Conversation.startSession(\
+                    config: config,\
+                    callbacks: callbacks\
+                )\
+            \} catch \{\
+                print("Failed to start conversation: \\(error)")\
+            \}\
+        \}\
+    \}\
+\
+    var body: some View \{\
+        VStack \{\
+            // Your UI implementation\
+            Button(action: startConversation) \{\
+                Text(status == .connected ? "End Call" : "Start Call")\
+            \}\
+        \}\
+    \}\
+\}\
+```\
+\
+<Note>\
+  This SDK is currently experimental and under active development. While it's stable enough for\
+  testing and development, it's not recommended for production use yet.\
+</Note>\
+---\
+title: WebSocket\
+subtitle: 'Create real-time, interactive voice conversations with AI agents'\
+---\
+\
+<Note>\
+  This documentation is for developers integrating directly with the ElevenLabs WebSocket API. For\
+  convenience, consider using [the official SDKs provided by\
+  ElevenLabs](/docs/conversational-ai/libraries/python).\
+</Note>\
+\
+The ElevenLabs [Conversational AI](https://elevenlabs.io/conversational-ai) WebSocket API enables real-time, interactive voice conversations with AI agents. By establishing a WebSocket connection, you can send audio input and receive audio responses in real-time, creating life-like conversational experiences.\
+\
+<Note>Endpoint: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=\{agent_id\}`</Note>\
+\
+## Authentication\
+\
+### Using Agent ID\
+\
+For public agents, you can directly use the `agent_id` in the WebSocket URL without additional authentication:\
+\
+```bash\
+wss://api.elevenlabs.io/v1/convai/conversation?agent_id=<your-agent-id>\
+```\
+\
+### Using a signed URL\
+\
+For private agents or conversations requiring authorization, obtain a signed URL from your server, which securely communicates with the ElevenLabs API using your API key.\
+\
+### Example using cURL\
+\
+**Request:**\
+\
+```bash\
+curl -X GET "https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=<your-agent-id>" \\\
+     -H "xi-api-key: <your-api-key>"\
+```\
+\
+**Response:**\
+\
+```json\
+\{\
+  "signed_url": "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=<your-agent-id>&token=<token>"\
+\}\
+```\
+\
+<Warning>Never expose your ElevenLabs API key on the client side.</Warning>\
+\
+## WebSocket events\
+\
+### Client to server events\
+\
+The following events can be sent from the client to the server:\
+\
+<AccordionGroup>\
+  <Accordion title="Contextual Updates">\
+    Send non-interrupting contextual information to update the conversation state. This allows you to provide additional context without disrupting the ongoing conversation flow.\
+\
+    ```javascript\
+    \{\
+      "type": "contextual_update",\
+      "text": "User clicked on pricing page"\
+    \}\
+    ```\
+\
+    **Use cases:**\
+    - Updating user status or preferences\
+    - Providing environmental context\
+    - Adding background information\
+    - Tracking user interface interactions\
+\
+    **Key points:**\
+    - Does not interrupt current conversation flow\
+    - Updates are incorporated as tool calls in conversation history\
+    - Helps maintain context without breaking the natural dialogue\
+\
+    <Note>\
+      Contextual updates are processed asynchronously and do not require a direct response from the server.\
+    </Note>\
+\
+  </Accordion>\
+</AccordionGroup>\
+\
+<Card\
+  title="WebSocket API Reference"\
+  icon="code"\
+  iconPosition="left"\
+  href="/docs/conversational-ai/api-reference/conversational-ai/websocket"\
+>\
+  See the Conversational AI WebSocket API reference documentation for detailed message structures,\
+  parameters, and examples.\
+</Card>\
+\
+## Next.js implementation example\
+\
+This example demonstrates how to implement a WebSocket-based conversational AI client in Next.js using the ElevenLabs WebSocket API.\
+\
+<Note>\
+  While this example uses the `voice-stream` package for microphone input handling, you can\
+  implement your own solution for capturing and encoding audio. The focus here is on demonstrating\
+  the WebSocket connection and event handling with the ElevenLabs API.\
+</Note>\
+\
+<Steps>\
+  <Step title="Install required dependencies">\
+    First, install the necessary packages:\
+\
+    ```bash\
+    npm install voice-stream\
+    ```\
+\
+    The `voice-stream` package handles microphone access and audio streaming, automatically encoding the audio in base64 format as required by the ElevenLabs API.\
+\
+    <Note>\
+      This example uses Tailwind CSS for styling. To add Tailwind to your Next.js project:\
+      ```bash\
+      npm install -D tailwindcss postcss autoprefixer\
+      npx tailwindcss init -p\
+      ```\
+\
+      Then follow the [official Tailwind CSS setup guide for Next.js](https://tailwindcss.com/docs/guides/nextjs).\
+\
+      Alternatively, you can replace the className attributes with your own CSS styles.\
+    </Note>\
+\
+  </Step>\
+\
+  <Step title="Create WebSocket types">\
+    Define the types for WebSocket events:\
+\
+    ```typescript app/types/websocket.ts\
+    type BaseEvent = \{\
+      type: string;\
+    \};\
+\
+    type UserTranscriptEvent = BaseEvent & \{\
+      type: "user_transcript";\
+      user_transcription_event: \{\
+        user_transcript: string;\
+      \};\
+    \};\
+\
+    type AgentResponseEvent = BaseEvent & \{\
+      type: "agent_response";\
+      agent_response_event: \{\
+        agent_response: string;\
+      \};\
+    \};\
+\
+    type AudioResponseEvent = BaseEvent & \{\
+      type: "audio";\
+      audio_event: \{\
+        audio_base_64: string;\
+        event_id: number;\
+      \};\
+    \};\
+\
+    type InterruptionEvent = BaseEvent & \{\
+      type: "interruption";\
+      interruption_event: \{\
+        reason: string;\
+      \};\
+    \};\
+\
+    type PingEvent = BaseEvent & \{\
+      type: "ping";\
+      ping_event: \{\
+        event_id: number;\
+        ping_ms?: number;\
+      \};\
+    \};\
+\
+    export type ElevenLabsWebSocketEvent =\
+      | UserTranscriptEvent\
+      | AgentResponseEvent\
+      | AudioResponseEvent\
+      | InterruptionEvent\
+      | PingEvent;\
+    ```\
+\
+  </Step>\
+\
+  <Step title="Create WebSocket hook">\
+    Create a custom hook to manage the WebSocket connection:\
+\
+    ```typescript app/hooks/useAgentConversation.ts\
+    'use client';\
+\
+    import \{ useCallback, useEffect, useRef, useState \} from 'react';\
+    import \{ useVoiceStream \} from 'voice-stream';\
+    import type \{ ElevenLabsWebSocketEvent \} from '../types/websocket';\
+\
+    const sendMessage = (websocket: WebSocket, request: object) => \{\
+      if (websocket.readyState !== WebSocket.OPEN) \{\
+        return;\
+      \}\
+      websocket.send(JSON.stringify(request));\
+    \};\
+\
+    export const useAgentConversation = () => \{\
+      const websocketRef = useRef<WebSocket>(null);\
+      const [isConnected, setIsConnected] = useState<boolean>(false);\
+\
+      const \{ startStreaming, stopStreaming \} = useVoiceStream(\{\
+        onAudioChunked: (audioData) => \{\
+          if (!websocketRef.current) return;\
+          sendMessage(websocketRef.current, \{\
+            user_audio_chunk: audioData,\
+          \});\
+        \},\
+      \});\
+\
+      const startConversation = useCallback(async () => \{\
+        if (isConnected) return;\
+\
+        const websocket = new WebSocket("wss://api.elevenlabs.io/v1/convai/conversation");\
+\
+        websocket.onopen = async () => \{\
+          setIsConnected(true);\
+          sendMessage(websocket, \{\
+            type: "conversation_initiation_client_data",\
+          \});\
+          await startStreaming();\
+        \};\
+\
+        websocket.onmessage = async (event) => \{\
+          const data = JSON.parse(event.data) as ElevenLabsWebSocketEvent;\
+\
+          // Handle ping events to keep connection alive\
+          if (data.type === "ping") \{\
+            setTimeout(() => \{\
+              sendMessage(websocket, \{\
+                type: "pong",\
+                event_id: data.ping_event.event_id,\
+              \});\
+            \}, data.ping_event.ping_ms);\
+          \}\
+\
+          if (data.type === "user_transcript") \{\
+            const \{ user_transcription_event \} = data;\
+            console.log("User transcript", user_transcription_event.user_transcript);\
+          \}\
+\
+          if (data.type === "agent_response") \{\
+            const \{ agent_response_event \} = data;\
+            console.log("Agent response", agent_response_event.agent_response);\
+          \}\
+\
+          if (data.type === "interruption") \{\
+            // Handle interruption\
+          \}\
+\
+          if (data.type === "audio") \{\
+            const \{ audio_event \} = data;\
+            // Implement your own audio playback system here\
+            // Note: You'll need to handle audio queuing to prevent overlapping\
+            // as the WebSocket sends audio events in chunks\
+          \}\
+        \};\
+\
+        websocketRef.current = websocket;\
+\
+        websocket.onclose = async () => \{\
+          websocketRef.current = null;\
+          setIsConnected(false);\
+          stopStreaming();\
+        \};\
+      \}, [startStreaming, isConnected, stopStreaming]);\
+\
+      const stopConversation = useCallback(async () => \{\
+        if (!websocketRef.current) return;\
+        websocketRef.current.close();\
+      \}, []);\
+\
+      useEffect(() => \{\
+        return () => \{\
+          if (websocketRef.current) \{\
+            websocketRef.current.close();\
+          \}\
+        \};\
+      \}, []);\
+\
+      return \{\
+        startConversation,\
+        stopConversation,\
+        isConnected,\
+      \};\
+    \};\
+    ```\
+\
+  </Step>\
+\
+  <Step title="Create the conversation component">\
+    Create a component to use the WebSocket hook:\
+\
+    ```typescript app/components/Conversation.tsx\
+    'use client';\
+\
+    import \{ useCallback \} from 'react';\
+    import \{ useAgentConversation \} from '../hooks/useAgentConversation';\
+\
+    export function Conversation() \{\
+      const \{ startConversation, stopConversation, isConnected \} = useAgentConversation();\
+\
+      const handleStart = useCallback(async () => \{\
+        try \{\
+          await navigator.mediaDevices.getUserMedia(\{ audio: true \});\
+          await startConversation();\
+        \} catch (error) \{\
+          console.error('Failed to start conversation:', error);\
+        \}\
+      \}, [startConversation]);\
+\
+      return (\
+        <div className="flex flex-col items-center gap-4">\
+          <div className="flex gap-2">\
+            <button\
+              onClick=\{handleStart\}\
+              disabled=\{isConnected\}\
+              className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"\
+            >\
+              Start Conversation\
+            </button>\
+            <button\
+              onClick=\{stopConversation\}\
+              disabled=\{!isConnected\}\
+              className="px-4 py-2 bg-red-500 text-white rounded disabled:bg-gray-300"\
+            >\
+              Stop Conversation\
+            </button>\
+          </div>\
+          <div className="flex flex-col items-center">\
+            <p>Status: \{isConnected ? 'Connected' : 'Disconnected'\}</p>\
+          </div>\
+        </div>\
+      );\
+    \}\
+    ```\
+\
+  </Step>\
+</Steps>\
+\
+## Next steps\
+\
+1. **Audio Playback**: Implement your own audio playback system using Web Audio API or a library. Remember to handle audio queuing to prevent overlapping as the WebSocket sends audio events in chunks.\
+2. **Error Handling**: Add retry logic and error recovery mechanisms\
+3. **UI Feedback**: Add visual indicators for voice activity and connection status\
+\
+## Latency management\
+\
+To ensure smooth conversations, implement these strategies:\
+\
+- **Adaptive Buffering:** Adjust audio buffering based on network conditions.\
+- **Jitter Buffer:** Implement a jitter buffer to smooth out variations in packet arrival times.\
+- **Ping-Pong Monitoring:** Use ping and pong events to measure round-trip time and adjust accordingly.\
+\
+## Security best practices\
+\
+- Rotate API keys regularly and use environment variables to store them.\
+- Implement rate limiting to prevent abuse.\
+- Clearly explain the intention when prompting users for microphone access.\
+- Optimized Chunking: Tweak the audio chunk duration to balance latency and efficiency.\
+\
+## Additional resources\
+\
+- [ElevenLabs Conversational AI Documentation](/docs/conversational-ai/overview)\
+- [ElevenLabs Conversational AI SDKs](/docs/conversational-ai/client-sdk)}
